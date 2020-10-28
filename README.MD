@@ -15,3 +15,9 @@
     pip install -r requirement.txt
 即可一次安裝
 
+### 尚未完成功能
+
+    Active Connection
+    New Connection
+    Throughput
+    Syslog
