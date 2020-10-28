@@ -163,7 +163,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     except:
         logging.error("無法取得HA資訊 " + IP)
         sys_ha = "ERROR"
-
 # ============= hostname =============
     try:
         sys_host = driver.find_element_by_id("deviceid").text.split('\n')[1]
@@ -193,7 +192,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_uptime = uptime_text[0] + ' ' + uptime_text[1]
     except:
         logging.error("無法取得uptime資訊 " + IP)
- 
 # ============= certificate =============
     try:
         driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/locallb/ssl_certificate/list.jsp?&startListIndex=0&showAll=true")
@@ -220,7 +218,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             # [print(item) for item in near_expired]
     except:
         logging.error("無法取得憑證資訊 " + IP)
-
 # ============= NTP =============
     try:
         driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_ntp.jsp")
@@ -234,7 +231,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_ntp = "OK"
     except:
         logging.error("無法取得NTP資訊 " + IP)
-
 # ============= SNMP ============= 
     try:
         driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/snmp/configuration_agent.jsp")
@@ -289,7 +285,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
         
     except Exception as e:
-        logging.error("無法取得CPU或記憶體資訊 " + IP + str(e))
+        logging.error("無法取得CPU或記憶體資訊 " + IP + " " + str(e))
 # ============= end =============
     driver.close()
     # t1.join()
