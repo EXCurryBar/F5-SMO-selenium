@@ -6,17 +6,18 @@ import logging
 import requests
 import paramiko
 import threading
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scp import SCPClient
-from time import sleep
 from numpy import shape
-from selenium import webdriver
+from scp import SCPClient
+from time import sleep, time
 from datetime import datetime
+from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 
-
-csvfile = open("data.csv", "a", newline='',encoding='gbk')
+PATH = os.path.abspath(os.getcwd())
+csvfile = open("data.csv", "a", newline='', encoding='UTF-8')
 writer = csv.writer(csvfile)
 requests.packages.urllib3.disable_warnings()
 now = datetime.now().strftime("%Y%m%d")
@@ -35,10 +36,10 @@ def usage(img, color="black"):  # return the maxium and minium of a graph
     point2 = []
     x, y = shape(img)[0:2]
 
-    if color=="black":
-        target = [0,0,0]
+    if color == "black":
+        target = [0, 0, 0]
     elif color == "blue":
-        target = [0,0,1]
+        target = [0, 0, 1]
 
     for i in range(x):
         for j in range(y):
@@ -62,7 +63,7 @@ def usage(img, color="black"):  # return the maxium and minium of a graph
             if sum(img[i, j][0:3] - target) == 0:
                 Min = i
                 break
-   
+
     return [(x-Max) / x, (x-Min) / x]
 
 
@@ -105,12 +106,28 @@ def get_ucs(client, hostname):  # generate ucs and saved at C:\ucs
         return "Error"
 
 
+def filter(lst, ft = [0.62, 1, 0.62]):
+    ft = np.array(ft)
+    for i in range(len(lst)-len(ft)):
+        lst[i:i+len(ft)] = lst[i:i+len(ft)] * ft
+    return lst
+
+
+def change_unit(value):
+    units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+    count = 0
+    while(value/1000 >= 1):
+        value = round(value/1000, 2)
+        count += 1
+    return str(value)+units[count]
+
+
 def get_data(IP, ACC, PASS, sleep_time=5):
 
     if is_avail(IP):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(IP, 22, username=ACC,password=PASS, timeout=10)
+        client.connect(IP, 22, username=ACC, password=PASS, timeout=10)
     else:
         print("無法連線到 " + IP)
 
@@ -127,23 +144,56 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     sys_snmp = "ERROR"
     sys_ucs = "ERROR"
     sys_qkview = "ERROR"
-# TODO ===========
+
+# TODO ========
     sys_ac = "ERROR"
     sys_nc = "ERROR"
     sys_tp = "ERROR"
     sys_log = "ERROR"
-# ================
-    options = webdriver.ChromeOptions()
-    options.add_argument('ignore-certificate-errors')
-    options.add_argument('--ignore-ssl-errors')
-    options.add_argument("--disable-extensions")
+# =============
+    # options = webdriver.ChromeOptions()
+    # prefs = {"download.default_directory": PATH}
+    # options.add_experimental_option("prefs", prefs)
+    # options.add_argument('ignore-certificate-errors')
+    # options.add_argument('--ignore-ssl-errors')
+    # options.add_argument("--disable-extensions")
 
-    driver = webdriver.Chrome(chrome_options=options)
-    driver.get("https://" + IP + "/tmui/login.jsp")
-    driver.find_element_by_id("username").send_keys(ACC)
-    driver.find_element_by_id("passwd").send_keys(PASS)
-    driver.find_element_by_xpath("//button[1]").click()
-    sleep(sleep_time)
+    # driver = webdriver.Chrome(chrome_options=options)
+    # driver.get("https://" + IP + "/tmui/login.jsp")
+    # driver.find_element_by_id("username").send_keys(ACC)
+    # driver.find_element_by_id("passwd").send_keys(PASS)
+    # driver.find_element_by_xpath("//button[1]").click()
+    # sleep(sleep_time)
+
+    # driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
+    # sleep(sleep_time)
+    # os.rename(PATH + "\\data_viz.jsp", PATH + "\\" + IP + "_throughput.csv")
+    # sleep(sleep_time)
+    # driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
+    # sleep(sleep_time)
+    # os.rename(PATH + "\\data_viz.jsp", PATH + "\\" + IP + "_connections.csv")
+    # sleep(sleep_time)
+
+    IP = "192.168.51.152"
+
+    # df = pd.read_csv(IP + "_throughput.csv")
+    # tp = np.array(df["tput_bytes_in"].values.tolist())
+    # tp = filter(tp)    
+    # maxium = int(max(tp))
+    # minimum = int(min(tp))
+    # print(change_unit(minimum * 8) + " ~ " + change_unit(maxium * 8))
+
+    
+    df = pd.read_csv(IP + "_connections.csv")
+    ac = np.array(df["curclientconns"].values.tolist())
+
+    ac = filter(ac, [0.6,0.85,0.6])
+    maxium = int(max(ac))
+    minimum = int(min(ac))
+
+    print(str(minimum) + " ~ " + str(maxium) )
+
+'''
 # ============= time =============
     try:
         time = driver.find_element_by_id("dateandtime")
@@ -244,8 +294,8 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_snmp = "OK"
     except:
         logging.error("無法取得SNMP資訊 " + IP)
-# ============= mem,cpu,active con., new con., throughput =============
-    name_lst = ["mem", "cpu", "ac", "nc", "tp"]
+# ============= mem, cpu =============
+    name_lst = ["mem", "cpu"]
     try:
         driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/stats/list.jsp?subset=All")
         sleep(sleep_time)
@@ -294,20 +344,24 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     # sys_ucs = "OK" if os.path.exists("C:\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"
 
     outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp, sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
-    print(outgo)
+    # print(outgo)
     writer.writerow(outgo)
-
+'''
 
 if __name__ == "__main__":
+    IP = "192.168.51.152"
+    ACCOUNT = "admin"
+    PASSWD = "dyna0808"
+    get_data(IP, ACCOUNT, PASSWD)
+    '''
     process_count = 0
     devices = pd.read_excel("SMO_ex.xls").values.tolist()
-    try:
-        PATH = os.path.abspath(os.getcwd())
-        os.chdir("\\")
-        os.system("mkdir qkviews, ucs")  
-        os.chdir(PATH)
-    except:
-        print("please run as administrator")
+    # try:
+    #     os.chdir("\\")
+    #     os.system("mkdir qkviews, ucs")  
+    #     os.chdir(PATH)
+    # except:
+    #     print("please run as administrator")
 
     for device in devices:
         process_count += 1
@@ -319,3 +373,4 @@ if __name__ == "__main__":
         if process_count == 4:
             t.join()
             process_count = 0
+    '''
