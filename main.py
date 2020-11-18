@@ -2,6 +2,7 @@ import re
 import os
 import csv
 import socket
+import shutil
 import logging
 import requests
 import paramiko
@@ -10,6 +11,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from numpy import shape
+from docx import Document
+from docx.shared import Pt
+from docx.oxml.ns import qn
 from scp import SCPClient
 from time import sleep, time
 from datetime import datetime
@@ -26,6 +30,47 @@ logging.basicConfig(level=logging.WARNING,
                     format="%(asctime)s %(levelname)s %(message)s",
                     datefmt="%Y-%m-%d %H:%M",
                     handlers=[logging.FileHandler("SMO.log", "w", "utf-8"), ])
+
+
+
+def words(ti, da, num):
+    global word_nn, doc, t0, filecount
+    # print(ti, ": ", da)
+    if word_nn == 1:
+        t0.cell(num, word_nn).text = da
+    elif word_nn == 3:
+        t0.cell(num, word_nn).text = da
+    elif word_nn == 5:
+        t0.cell(num, word_nn).text = da
+    else:
+        t0.cell(num, 6).text = da
+    while True:
+        try:
+            doc.save("SMO_" + str(filecount) + ".docx")
+            break
+        except:
+            pass
+
+
+def paste(lst):
+    sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp, sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver = lst
+    words("hostname", sys_host, 0)
+    words("S/N", sys_sn, 1)
+    words("uptime", sys_uptime, 2)
+    words("Memory", sys_mem, 3)
+    words("CPU", sys_cpu, 4)
+    words("Active Connections", sys_ac, 5)
+    words("New Connections", sys_nc, 6)
+    words("Throughput", sys_tp, 7)
+    words("Syslog", sys_log, 8)
+    words("NTP", sys_ntp, 9)
+    words("SNMP", sys_snmp, 10)
+    words("Config Backup",sys_ucs,11)
+    words("Qkview Backup",sys_qkview,12)
+    words("Time", sys_time, 13)
+    words("Certificate status",sys_cert,14)
+    words("HA status", sys_ha, 15)
+    words("Version", sys_ver, 16)
 
 
 def usage(img, color="black"):  # return the maxium and minium of a graph
@@ -56,7 +101,7 @@ def usage(img, color="black"):  # return the maxium and minium of a graph
     for i in range(x):
         for j in range(y):
             if sum(img[i, j][0:3] - target) == 0:
-                (Max) = i
+                Max = i
                 break
     for i in range(x-1, 0, -1):
         for j in range(y-1, 0, -1):
@@ -106,13 +151,6 @@ def get_ucs(client, hostname):  # generate ucs and saved at C:\ucs
         return "Error"
 
 
-def filter(lst, ft = [0.62, 1, 0.62]):
-    ft = np.array(ft)
-    for i in range(len(lst)-len(ft)):
-        lst[i:i+len(ft)] = lst[i:i+len(ft)] * ft
-    return lst
-
-
 def change_unit(value):
     units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
     count = 0
@@ -124,7 +162,7 @@ def change_unit(value):
 
 def get_data(IP, ACC, PASS, sleep_time=5):
 
-    if is_avail(IP):
+    if is_avail(IP) and is_avail(IP, 443):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(IP, 22, username=ACC, password=PASS, timeout=10)
@@ -144,60 +182,30 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     sys_snmp = "ERROR"
     sys_ucs = "ERROR"
     sys_qkview = "ERROR"
-
-# TODO ========
     sys_ac = "ERROR"
     sys_nc = "ERROR"
     sys_tp = "ERROR"
+# TODO ========
     sys_log = "ERROR"
 # =============
-    # options = webdriver.ChromeOptions()
-    # prefs = {"download.default_directory": PATH}
-    # options.add_experimental_option("prefs", prefs)
-    # options.add_argument('ignore-certificate-errors')
-    # options.add_argument('--ignore-ssl-errors')
-    # options.add_argument("--disable-extensions")
+    options = webdriver.ChromeOptions()
+    prefs = {"download.default_directory": PATH + "\\" + IP}
+    options.add_experimental_option("prefs", prefs)
+    options.add_argument('ignore-certificate-errors')
+    options.add_argument('--ignore-ssl-errors')
+    options.add_argument("--disable-extensions")
 
-    # driver = webdriver.Chrome(chrome_options=options)
-    # driver.get("https://" + IP + "/tmui/login.jsp")
-    # driver.find_element_by_id("username").send_keys(ACC)
-    # driver.find_element_by_id("passwd").send_keys(PASS)
-    # driver.find_element_by_xpath("//button[1]").click()
-    # sleep(sleep_time)
+    driver = webdriver.Chrome(chrome_options=options)
+    driver.get("https://" + IP + "/tmui/login.jsp")
+    driver.find_element_by_id("username").send_keys(ACC)
+    driver.find_element_by_id("passwd").send_keys(PASS)
+    driver.find_element_by_xpath("//button[1]").click()
+    sleep(sleep_time)
 
-    # driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
-    # sleep(sleep_time)
-    # os.rename(PATH + "\\data_viz.jsp", PATH + "\\" + IP + "_throughput.csv")
-    # sleep(sleep_time)
-    # driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
-    # sleep(sleep_time)
-    # os.rename(PATH + "\\data_viz.jsp", PATH + "\\" + IP + "_connections.csv")
-    # sleep(sleep_time)
-
-    IP = "192.168.51.152"
-
-    # df = pd.read_csv(IP + "_throughput.csv")
-    # tp = np.array(df["tput_bytes_in"].values.tolist())
-    # tp = filter(tp)    
-    # maxium = int(max(tp))
-    # minimum = int(min(tp))
-    # print(change_unit(minimum * 8) + " ~ " + change_unit(maxium * 8))
-
-    
-    df = pd.read_csv(IP + "_connections.csv")
-    ac = np.array(df["curclientconns"].values.tolist())
-
-    ac = filter(ac, [0.6,0.85,0.6])
-    maxium = int(max(ac))
-    minimum = int(min(ac))
-
-    print(str(minimum) + " ~ " + str(maxium) )
-
-'''
 # ============= time =============
     try:
-        time = driver.find_element_by_id("dateandtime")
-        system_time = time.text.split('\n')[-1].split(' ')[0:2]
+        time_device = driver.find_element_by_id("dateandtime")
+        system_time = time_device.text.split('\n')[-1].split(' ')[0:2]
         sys_time_hr, sys_time_min = system_time[0].split(':')
         sys_time_hr = str(int(sys_time_hr) + 12 * int(system_time[1] == "PM"))
         system_time = sys_time_hr.zfill(2)+':'+sys_time_min.zfill(2)
@@ -209,7 +217,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_time = "ERROR"
 # ============= ha =============
     try:
-        sys_ha = driver.find_element_by_id("status").text.split('\n')[1]
+        sys_ha = driver.find_element_by_id("status").text.split('\n')[-1]
     except:
         logging.error("無法取得HA資訊 " + IP)
         sys_ha = "ERROR"
@@ -221,7 +229,8 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_host = "ERROR"
 # ============= sn, sys_ver =============
     try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_general.jsp")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/system/device/properties_general.jsp")
         sleep(sleep_time)
         driver.switch_to.frame(driver.find_element_by_id("contentframe"))
         items = driver.find_elements_by_class_name("settings")
@@ -235,16 +244,18 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     # t2.start()
 # ============= uptime =============
     try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/service/list.jsp")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/system/service/list.jsp")
         sleep(sleep_time)
         driver.switch_to.frame(driver.find_element_by_id("contentframe"))
-        uptime_text = driver.find_element_by_id("list_body").text.split('\n')[0].split(' ')[-2:]
+        uptime_text = driver.find_element_by_id("list_body").text.split('\n')[0].split(',')[0].split(' ')[-2:]
         sys_uptime = uptime_text[0] + ' ' + uptime_text[1]
     except:
         logging.error("無法取得uptime資訊 " + IP)
 # ============= certificate =============
     try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/locallb/ssl_certificate/list.jsp?&startListIndex=0&showAll=true")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/locallb/ssl_certificate/list.jsp?&startListIndex=0&showAll=true")
         sleep(sleep_time*3)
         driver.switch_to.frame(driver.find_element_by_id("contentframe"))
 
@@ -258,10 +269,15 @@ def get_data(IP, ACC, PASS, sleep_time=5):
                     expired.append(certificates[i-1].split(' ')[0])
                 elif d1 >= today:
                     near_expired.append(certificates[i-1].split(' ')[0])
-        if len(expired)==0 and len(near_expired)==0:
+        if len(expired) == 0 and len(near_expired) == 0:
             sys_cert = "OK"
         else:
-            sys_cert = "已過期: "+ str(len(expired)) + " 快過期:" + str(len(near_expired))
+            sys_cert = "expired: " + str(len(expired)) + " near expire:" + str(len(near_expired))
+            with open(IP+"_Certificate","w",encoding="utf-8") as cert_file:
+                cert_file.write("Near Expire:\n")
+                [cert_file.write(row) for row in near_expired]
+                cert_file.write("Expired:\n")
+                [cert_file.write(row) for row in expired]
             # print("已過期:",len(expired))
             # [print(item) for item in expired]
             # print("快過期:",len(near_expired))
@@ -270,10 +286,12 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         logging.error("無法取得憑證資訊 " + IP)
 # ============= NTP =============
     try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_ntp.jsp")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/system/device/properties_ntp.jsp")
         sleep(sleep_time)
         driver.switch_to.frame(driver.find_element_by_id("contentframe"))
-        lst = [item for item in driver.find_element_by_id("ntp.servers").text.replace(' ', '').split('\n') if item != '']
+        lst = [item for item in driver.find_element_by_id(
+            "ntp.servers").text.replace(' ', '').split('\n') if item != '']
 
         if len(lst) == 0:
             sys_ntp = "N/A"
@@ -281,12 +299,14 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_ntp = "OK"
     except:
         logging.error("無法取得NTP資訊 " + IP)
-# ============= SNMP ============= 
+# ============= SNMP =============
     try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/snmp/configuration_agent.jsp")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/system/snmp/configuration_agent.jsp")
         sleep(sleep_time)
         driver.switch_to.frame(driver.find_element_by_id("contentframe"))
-        lst = [item for item in driver.find_element_by_id("snmp_allow_list").text.replace(' ', '').split('\n') if item != '']
+        lst = [item for item in driver.find_element_by_id(
+            "snmp_allow_list").text.replace(' ', '').split('\n') if item != '']
 
         if len(lst) == 0 or lst[0] == "127.0.0.0/8":
             sys_snmp = "N/A"
@@ -297,14 +317,16 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 # ============= mem, cpu =============
     name_lst = ["mem", "cpu"]
     try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/stats/list.jsp?subset=All")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/system/stats/list.jsp?subset=All")
         sleep(sleep_time)
         driver.switch_to.frame(driver.find_element_by_id("contentframe"))
         s = Select(driver.find_element_by_name("int_select"))
         s.select_by_value("3")
 
         img = driver.find_elements_by_tag_name("img")
-        img_lst = [item.get_attribute('src') for item in img if item.get_attribute('src')[-3:] == "png"]
+        img_lst = [item.get_attribute(
+            'src') for item in img if item.get_attribute('src')[-3:] == "png"]
 
         s = requests.session()
         for cookie in driver.get_cookies():
@@ -317,60 +339,111 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
         res = []
         for i in range(len(name_lst)):
-            if i == len(name_lst) - 1:
-                res.append(usage(IP + name_lst[i] + ".png","blue"))
-            else:
-                res.append(usage(IP + name_lst[i] + ".png"))
+            res.append(usage(IP + name_lst[i] + ".png"))
         [os.system("del " + IP + name + ".png") for name in name_lst]
 
         if res[0][0] == res[0][1]:
             sys_mem = str(int(res[0][0] * 100)) + "%"
         else:
-            sys_mem = str(int(res[0][0] * 100)) + "% ~ " + str(int(res[0][1] * 100)) + "%"
+            sys_mem = str(int(res[0][0] * 100)) + "% ~ " + \
+                str(int(res[0][1] * 100)) + "%"
 
         if res[1][0] == res[1][1]:
             sys_cpu = str(int(res[1][0] * 100)) + "%"
         else:
-            sys_cpu = str(int(res[1][0] * 100)) + "% ~ " + str(int(res[1][1] * 100)) + "%"
+            sys_cpu = str(int(res[1][0] * 100)) + "% ~ " + \
+                str(int(res[1][1] * 100)) + "%"
 
-        
     except Exception as e:
-        logging.error("無法取得CPU或記憶體資訊 " + IP + " " + str(e))
+        logging.error("無法取得CPU或記憶體資訊 " + IP)
+# ============= throughput =============
+    try:
+        driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
+        sleep(sleep_time)
+        os.rename(PATH + "\\" + IP +"\\data_viz.jsp", PATH + "\\" + IP + "\\throughput.csv")
+        sleep(sleep_time)
+        df = pd.read_csv(IP + "\\throughput.csv")
+        tp = np.array(df["tput_bytes_in"].values.tolist())
+        maxium = int(max(tp))
+        minimum = int(min(tp))
+        sys_tp = change_unit(minimum * 8) + " ~ " + change_unit(maxium * 8)
+    except:
+        logging.error("無法取得 throughput " + IP)
+# ============= active connection =============
+    try:
+        driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
+        sleep(sleep_time)
+        os.rename(PATH + "\\" + IP + "\\data_viz.jsp", PATH + "\\" + IP + "\\connections.csv")
+        sleep(sleep_time)
+        df = pd.read_csv(IP + "\\connections.csv")
+        ac = np.array(df["curclientconns"].values.tolist())
+        maxium = int(round(max(ac)))
+        minimum = int(round(min(ac)))
+        sys_ac = str(minimum) + " ~ " + str(maxium) + "/s"
+    except:
+        logging.error("無法取得 active connection " + IP)
+# ============= new connection =============
+    try:
+        nc = np.array(df["totclientconns"].values.tolist())
+        maxium = int(round(max(nc)))
+        minimum = int(round(min(nc)))
+        sys_nc = str(minimum) + " ~ " + str(maxium) + "/s"
+    except:
+        logging.error("無法取得 new connection " + IP)
 # ============= end =============
+    shutil.rmtree(IP, ignore_errors=True)
     driver.close()
     # t1.join()
     # t2.join()
     # sys_qkview = "OK" if os.path.exists("C:\\qkviews\\" + sys_host + '_' + now + ".qkview") else "ERROR"
     # sys_ucs = "OK" if os.path.exists("C:\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"
 
-    outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp, sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
+    outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp,
+             sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
     # print(outgo)
     writer.writerow(outgo)
-'''
+
 
 if __name__ == "__main__":
-    IP = "192.168.51.152"
-    ACCOUNT = "admin"
-    PASSWD = "dyna0808"
-    get_data(IP, ACCOUNT, PASSWD)
-    '''
     process_count = 0
     devices = pd.read_excel("SMO_ex.xls").values.tolist()
-    # try:
-    #     os.chdir("\\")
-    #     os.system("mkdir qkviews, ucs")  
-    #     os.chdir(PATH)
-    # except:
-    #     print("please run as administrator")
+    try:
+        os.chdir("\\")
+        os.system("mkdir qkviews, ucs")
+        os.chdir(PATH)
+    except:
+        print("please run as administrator")
 
     for device in devices:
         process_count += 1
         IP = device[0]
         ACCOUNT = device[1]
         PASSWD = device[2]
-        t = threading.Thread(target=get_data,args=(IP,ACCOUNT,PASSWD,10))
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 10))
         t.start()
         if process_count == 4:
             t.join()
             process_count = 0
-    '''
+
+    if(not t.is_alive()):
+        csvfile.close()
+
+    global doc, t0, word_nn, filecount
+    filecount = 0
+    data_lst = []
+    with open("data.csv", "r", encoding="utf-8") as csvf:
+        data = csv.reader(csvf)
+        for line in data:
+            data_lst.append(line)
+
+    for row in range(len(data_lst)):
+        if row % 4 == 0:
+            doc = Document('example.docx')
+            doc.styles['Normal'].font.name = "Times New Roman"
+            doc.styles['Normal'].font.size = Pt(10)
+            t0 = doc.tables[0]
+            word_nn = 1
+            filecount += 1
+        paste(data_lst[row])
+        word_nn += 2
+    

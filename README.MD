@@ -20,7 +20,4 @@
 
 ### 尚未完成功能
 
-    Active Connection
-    New Connection
-    Throughput
     Syslog
