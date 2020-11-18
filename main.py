@@ -21,6 +21,7 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 
 PATH = os.path.abspath(os.getcwd())
+pass_count = 0
 csvfile = open("data.csv", "a", newline='', encoding='UTF-8')
 writer = csv.writer(csvfile)
 requests.packages.urllib3.disable_warnings()
@@ -273,11 +274,11 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_cert = "OK"
         else:
             sys_cert = "expired: " + str(len(expired)) + " near expire:" + str(len(near_expired))
-            with open(IP+"_Certificate","w",encoding="utf-8") as cert_file:
+            with open(IP+"_Certificate.txt","w",encoding="utf-8") as cert_file:
                 cert_file.write("Near Expire:\n")
-                [cert_file.write(row) for row in near_expired]
-                cert_file.write("Expired:\n")
-                [cert_file.write(row) for row in expired]
+                [cert_file.write(row + "\n") for row in near_expired]
+                cert_file.write("\nExpired:\n")
+                [cert_file.write(row + "\n") for row in expired]
             # print("已過期:",len(expired))
             # [print(item) for item in expired]
             # print("快過期:",len(near_expired))
@@ -405,6 +406,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
 
 if __name__ == "__main__":
+    threads = []
     process_count = 0
     devices = pd.read_excel("SMO_ex.xls").values.tolist()
     try:
@@ -419,14 +421,15 @@ if __name__ == "__main__":
         IP = device[0]
         ACCOUNT = device[1]
         PASSWD = device[2]
-        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 10))
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 20))
+        threads.append(t)
         t.start()
         if process_count == 4:
             t.join()
             process_count = 0
 
-    if(not t.is_alive()):
-        csvfile.close()
+    for x in threads:
+        x.join()
 
     global doc, t0, word_nn, filecount
     filecount = 0
@@ -446,4 +449,3 @@ if __name__ == "__main__":
             filecount += 1
         paste(data_lst[row])
         word_nn += 2
-    
