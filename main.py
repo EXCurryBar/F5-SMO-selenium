@@ -73,46 +73,6 @@ def paste(lst):
     words("HA status", sys_ha, 15)
     words("Version", sys_ver, 16)
 
-
-def usage(img, color="black"):  # return the maxium and minium of a graph
-    Max = 0
-    Min = 101
-    img = plt.imread(img)
-    point1 = []
-    point2 = []
-    x, y = shape(img)[0:2]
-
-    if color == "black":
-        target = [0, 0, 0]
-    elif color == "blue":
-        target = [0, 0, 1]
-
-    for i in range(x):
-        for j in range(y):
-            if sum(img[i, j][0:3]) == 3:
-                point1 = [i, j]
-                break
-    for i in range(x-1, 0, -1):
-        for j in range(y-1, 0, -1):
-            if sum(img[i, j][0:3]) == 3:
-                point2 = [i, j]
-                break
-    img = img[point2[0]:point1[0], point1[1]:point2[1]]
-    x, y = shape(img)[0:2]
-    for i in range(x):
-        for j in range(y):
-            if sum(img[i, j][0:3] - target) == 0:
-                Max = i
-                break
-    for i in range(x-1, 0, -1):
-        for j in range(y-1, 0, -1):
-            if sum(img[i, j][0:3] - target) == 0:
-                Min = i
-                break
-
-    return [(x-Max) / x, (x-Min) / x]
-
-
 def is_avail(IP, port=22):  # return True if device is reachable
     try:
         host = socket.gethostbyname(IP)
@@ -315,55 +275,51 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_snmp = "OK"
     except:
         logging.error("無法取得SNMP資訊 " + IP)
-# ============= mem, cpu =============
-    name_lst = ["mem", "cpu"]
-    try:
-        driver.get("https://" + IP +
-                   "/tmui/Control/jspmap/tmui/system/stats/list.jsp?subset=All")
-        sleep(sleep_time)
-        driver.switch_to.frame(driver.find_element_by_id("contentframe"))
-        s = Select(driver.find_element_by_name("int_select"))
-        s.select_by_value("3")
-
-        img = driver.find_elements_by_tag_name("img")
-        img_lst = [item.get_attribute(
-            'src') for item in img if item.get_attribute('src')[-3:] == "png"]
-
-        s = requests.session()
-        for cookie in driver.get_cookies():
-            c = {cookie['name']: cookie['value']}
-            s.cookies.update(c)
-
-        for i in range(len(name_lst)):
-            r = s.get(img_lst[i], allow_redirects=True, verify=False)
-            open(IP + name_lst[i] + '.png', 'wb').write(r.content)
-
-        res = []
-        for i in range(len(name_lst)):
-            res.append(usage(IP + name_lst[i] + ".png"))
-        [os.system("del " + IP + name + ".png") for name in name_lst]
-
-        if res[0][0] == res[0][1]:
-            sys_mem = str(int(res[0][0] * 100)) + "%"
-        else:
-            sys_mem = str(int(res[0][0] * 100)) + "% ~ " + \
-                str(int(res[0][1] * 100)) + "%"
-
-        if res[1][0] == res[1][1]:
-            sys_cpu = str(int(res[1][0] * 100)) + "%"
-        else:
-            sys_cpu = str(int(res[1][0] * 100)) + "% ~ " + \
-                str(int(res[1][1] * 100)) + "%"
-
-    except Exception as e:
-        logging.error("無法取得CPU或記憶體資訊 " + IP)
-# ============= throughput =============
+# ============= mem =============
     try:
         driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
         sleep(sleep_time)
         os.rename(PATH + "\\" + IP +"\\data_viz.jsp", PATH + "\\" + IP + "\\throughput.csv")
         sleep(sleep_time)
         df = pd.read_csv(IP + "\\throughput.csv")
+        mem = df[["Rtmmused", "Rtmmmemory"]]
+        used = mem["Rtmmused"].values.tolist()
+        total = mem["Rtmmmemory"].values.tolist()
+        mem_max = 0
+        mem_min = 101
+        for i in range(len(total)):
+            value = round((used[i]/total[i]) * 100)
+            mem_max = value if value > mem_max else mem_max
+            mem_min = value if value < mem_min else mem_min
+        
+        if mem_max == mem_min:
+            sys_mem = str(mem_min) + "%"
+        else:
+            sys_mem = str(mem_min) + "% ~ " + str(mem_max) + "%"
+
+    except :
+        logging.error("無法取得記憶體用量" + IP)
+# ============= cpu =============
+    try:
+        cpu = df[["Ruser", "Rniced","Rsystem","Ridle","Rirq","Rsoftirq","Riowait"]]
+        used =[sum(item) for item in cpu[["Ruser", "Rniced","Rsystem"]].values.tolist()]
+        total = [sum(item) for item in cpu.values.tolist()]
+        cpu_max = 0
+        cpu_min = 101
+        for i in range(len(total)):
+            value = round((used[i]/total[i]) * 100)
+            cpu_max = value if value > cpu_max else cpu_max
+            cpu_min = value if value < cpu_min else cpu_min
+
+        if cpu_max == cpu_min:
+            sys_cpu = str(cpu_min) + "%"
+        else:
+            sys_cpu = str(cpu_min) + "% ~ " + str(cpu_max) + "%"
+
+    except :
+        logging.error("無法取得CPU用量" + IP)
+# ============= throughput =============
+    try:
         tp = np.array(df["tput_bytes_in"].values.tolist())
         maxium = int(max(tp))
         minimum = int(min(tp))
