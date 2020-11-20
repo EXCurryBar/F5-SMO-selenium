@@ -9,8 +9,6 @@ import paramiko
 import threading
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from numpy import shape
 from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
@@ -21,7 +19,6 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 
 PATH = os.path.abspath(os.getcwd())
-pass_count = 0
 csvfile = open("data.csv", "a", newline='', encoding='UTF-8')
 writer = csv.writer(csvfile)
 requests.packages.urllib3.disable_warnings()
@@ -31,7 +28,6 @@ logging.basicConfig(level=logging.WARNING,
                     format="%(asctime)s %(levelname)s %(message)s",
                     datefmt="%Y-%m-%d %H:%M",
                     handlers=[logging.FileHandler("SMO.log", "w", "utf-8"), ])
-
 
 
 def words(ti, da, num):
@@ -72,6 +68,7 @@ def paste(lst):
     words("Certificate status",sys_cert,14)
     words("HA status", sys_ha, 15)
     words("Version", sys_ver, 16)
+
 
 def is_avail(IP, port=22):  # return True if device is reachable
     try:
@@ -123,6 +120,7 @@ def change_unit(value):
 
 def get_data(IP, ACC, PASS, sleep_time=5):
 
+    global pass_count
     if is_avail(IP) and is_avail(IP, 443):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -162,7 +160,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     driver.find_element_by_id("passwd").send_keys(PASS)
     driver.find_element_by_xpath("//button[1]").click()
     sleep(sleep_time)
-
 # ============= time =============
     try:
         time_device = driver.find_element_by_id("dateandtime")
@@ -357,12 +354,15 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp,
              sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
-    # print(outgo)
     writer.writerow(outgo)
+    print(IP+" 蒐集完畢")
+    pass_count += 1
 
 
 if __name__ == "__main__":
+    global doc, t0, word_nn, filecount, pass_count
     threads = []
+    pass_count = 0
     process_count = 0
     devices = pd.read_excel("SMO_ex.xls").values.tolist()
     try:
@@ -384,10 +384,9 @@ if __name__ == "__main__":
             t.join()
             process_count = 0
 
-    for x in threads:
-        x.join()
-
-    global doc, t0, word_nn, filecount
+    while(pass_count!=len(devices)):
+        sleep(1)
+    csvfile.close()
     filecount = 0
     data_lst = []
     with open("data.csv", "r", encoding="utf-8") as csvf:
