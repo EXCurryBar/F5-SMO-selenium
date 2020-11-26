@@ -6,7 +6,6 @@ import gzip
 import socket
 import shutil
 import logging
-import requests
 import paramiko
 import threading
 import numpy as np
@@ -239,7 +238,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     sys_ac = "ERROR"
     sys_nc = "ERROR"
     sys_tp = "ERROR"
-# TODO ========
+# FIXING ========
     sys_log = "OK"
 # =============
     options = webdriver.ChromeOptions()
@@ -510,6 +509,7 @@ if __name__ == "__main__":
     pass_count = 0
     process_count = 0
     devices = pd.read_excel("SMO_ex.xls").values.tolist()
+
     try:
         os.makedirs("qkviews")
         os.makedirs("ucs")
@@ -534,6 +534,7 @@ if __name__ == "__main__":
 
     while(pass_count!=len(devices)):
         sleep(1)
+        
     csvfile.close()
     filecount = 0
     data_lst = []
