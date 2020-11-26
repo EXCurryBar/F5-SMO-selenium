@@ -17,6 +17,9 @@
     pip install -r requirement.txt
 即可一次安裝
 
-### 尚未完成功能
+### 已知問題
 
-    Syslog
+    syslog : 
+        1.連線速度過慢會導致log檔蒐集不完全
+        2.無判斷system log錯誤
+
