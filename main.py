@@ -23,7 +23,6 @@ from selenium.webdriver.support.ui import Select
 PATH = os.path.abspath(os.getcwd())
 csvfile = open("data.csv", "a", newline='', encoding='UTF-8')
 writer = csv.writer(csvfile)
-requests.packages.urllib3.disable_warnings()
 now = datetime.now().strftime("%Y%m%d")
 today = datetime.today()
 logging.basicConfig(level=logging.WARNING,
