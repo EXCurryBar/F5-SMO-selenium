@@ -88,11 +88,12 @@ def get_qkview(client, hostname):  # generate qkview and saved at C:\qkview
         dummy = stdout.readlines()
 
         scp = SCPClient(client.get_transport())
-        scp.get("/shared/tmp/" + hostname + "_" + now + ".qkview", "\\qkviews")
+        scp.get("/shared/tmp/" + hostname + "_" + now + ".qkview", PATH + "\\qkviews\\"+ hostname + "_" + now + ".qkview")
         print(hostname, " Qkview saved")
+        client.exec_command("rm -rf /shared/tmp/" + hostname + "_" + now + ".qkview")
         return "OK"
     except:
-        print("Error occur")
+        logging.error("無法取得Qkview " + IP)
         return "Error"
 
 
@@ -103,10 +104,11 @@ def get_ucs(client, hostname):  # generate ucs and saved at C:\ucs
         dummy = stdout.readlines()
 
         scp = SCPClient(client.get_transport())
-        scp.get("/var/local/ucs/" + hostname + "_" + now + ".ucs", "\\ucs")
+        scp.get("/var/local/ucs/" + hostname + "_" + now + ".ucs", PATH + "\\ucs\\" + hostname + "_" + now + ".ucs")
         print(hostname, " UCS saved")
         return "OK"
     except:
+        logging.error("無法取得UCS " + IP)
         return "Error"
 
 
@@ -301,10 +303,10 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     if healthCheck(IP):
         driver.close()
 # ============= ucs, qkview =============
-    # t1 = threading.Thread(target=get_qkview, args=(client,sys_host))
-    # t2 = threading.Thread(target=get_ucs, args=(client,sys_host))
-    # t1.start()
-    # t2.start()
+    t1 = threading.Thread(target=get_qkview, args=(client,sys_host))
+    t2 = threading.Thread(target=get_ucs, args=(client,sys_host))
+    t1.start()
+    t2.start()
 
     if healthCheck(IP):
         driver.close()
@@ -483,10 +485,10 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     shutil.rmtree(IP, ignore_errors=True)
     shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
     driver.close()
-    # t1.join()
-    # t2.join()
-    # sys_qkview = "OK" if os.path.exists("C:\\qkviews\\" + sys_host + '_' + now + ".qkview") else "ERROR"
-    # sys_ucs = "OK" if os.path.exists("C:\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"
+    t1.join()
+    t2.join()
+    sys_qkview = "OK" if os.path.exists(PATH + "\\qkviews\\" + sys_host + '_' + now + ".qkview") else "ERROR"
+    sys_ucs = "OK" if os.path.exists(PATH + "\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"
     t3.join()
     t4.join()
     d = os.listdir()
@@ -524,7 +526,7 @@ if __name__ == "__main__":
             os.makedirs(IP + "_log")
         except:
             pass
-        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 20))
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 25))
         threads.append(t)
         t.start()
         if process_count == 4:
