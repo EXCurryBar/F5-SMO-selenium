@@ -1,6 +1,8 @@
+# ============ import thingie =============
 import re
 import os
 import csv
+import gzip
 import socket
 import shutil
 import logging
@@ -18,6 +20,7 @@ from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 
+# ============= initialize thingie ============
 PATH = os.path.abspath(os.getcwd())
 csvfile = open("data.csv", "a", newline='', encoding='UTF-8')
 writer = csv.writer(csvfile)
@@ -109,13 +112,102 @@ def get_ucs(client, hostname):  # generate ucs and saved at C:\ucs
         return "Error"
 
 
-def change_unit(value):
-    units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+def ltm(IP, ACC, PASS):
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(IP, username=ACC, password=PASS)
+        _, stdout, _ = client.exec_command("cd /var/log; ls")
+
+        lst = [line.replace('\n', '')
+               for line in stdout.readlines() if line[:3] == "ltm"]
+        log = ""
+        scp = SCPClient(client.get_transport())
+        for line in lst:
+            scp.get("/var/log/" + line, PATH + "\\" + IP + "_log\\" + line)
+            if line[-2:] == "gz":
+                with gzip.open(IP+"_log\\"+line, "rb") as f_in:
+                    log += f_in.read().decode()
+            else:
+                with open(IP+"_log\\"+line, "rb") as f_in:
+                    log += f_in.read().decode()
+    except Exception as e:
+        print(e)
+        return
+    with open(IP+"_log\\ltm.log", "w", encoding='UTF-8') as lf:
+        lf.write(log)
+    log = ""
+    with open(IP+"_log\\ltm.log", "r", encoding='UTF-8') as lf:
+        log = lf.read()
+
+    # == HA state change
+    P = re.compile("\n.*HA unit.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "w", newline='') as ef:
+            ef.writelines(res)
+
+    # == VS state change
+    P = re.compile("\n.*Virtual Address .*GREEN to RED.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_VS_ERR.log", "w", newline='') as ef:
+            ef.writelines(res)
+
+    # == Pool monitor down
+    # P = re.compile("\n.*Pool.*status down.*\n")
+    # res = re.findall(P, log)
+    # if len(res) != 0:
+    #     with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
+    #         ef.writelines(res)
+
+
+def syst(IP, ACC, PASS):
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(IP, username=ACC, password=PASS)
+        _, stdout, _ = client.exec_command("cd /var/log; ls")
+
+        lst = [line.replace('\n', '')
+               for line in stdout.readlines() if line[:8] == "messages"]
+        log = ""
+        scp = SCPClient(client.get_transport())
+        for line in lst:
+            scp.get("/var/log/" + line, PATH + "\\" + IP + "_log\\" + line)
+            if line[-2:] == "gz":
+                with gzip.open(IP+"_log\\"+line, "rb") as f_in:
+                    log += f_in.read().decode()
+            else:
+                with open(IP+"_log\\"+line, "rb") as f_in:
+                    log += f_in.read().decode()
+    except Exception as e:
+        print(e)
+        return
+    with open(IP+"_log\\messages.log", "w", encoding='UTF-8') as lf:
+        lf.write(log)
+    log = ""
+    with open(IP+"_log\\messages.log", "r", encoding='UTF-8') as lf:
+        log = lf.read()
+
+
+def healthCheck(IP):
+    global pass_count
+    if not (is_avail(IP) and is_avail(IP, 443)):
+        shutil.rmtree(IP, ignore_errors=True)
+        pass_count += 1
+        logging.error("與 " + IP + " 連線中斷")
+        return True
+    return False
+
+
+def change_unit(value, unit = "bps"):
+    scale = ['', 'k', 'M', 'G', 'T']
     count = 0
     while(value/1000 >= 1):
         value = round(value/1000, 2)
         count += 1
-    return str(value)+units[count]
+    return str(value)+scale[count]+unit
 
 
 def get_data(IP, ACC, PASS, sleep_time=5):
@@ -126,7 +218,10 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(IP, 22, username=ACC, password=PASS, timeout=10)
     else:
-        print("無法連線到 " + IP)
+        print("\n無法連線到 " + IP)
+        pass_count += 1
+        shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+        return
 
     sys_host = "ERROR"
     sys_sn = "ERROR"
@@ -145,7 +240,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     sys_nc = "ERROR"
     sys_tp = "ERROR"
 # TODO ========
-    sys_log = "ERROR"
+    sys_log = "OK"
 # =============
     options = webdriver.ChromeOptions()
     prefs = {"download.default_directory": PATH + "\\" + IP}
@@ -173,18 +268,27 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     except:
         logging.error("無法獲取時間資訊 " + IP)
         sys_time = "ERROR"
+
+    if healthCheck(IP):
+        driver.close()
 # ============= ha =============
     try:
         sys_ha = driver.find_element_by_id("status").text.split('\n')[-1]
     except:
         logging.error("無法取得HA資訊 " + IP)
         sys_ha = "ERROR"
+
+    if healthCheck(IP):
+        driver.close()
 # ============= hostname =============
     try:
         sys_host = driver.find_element_by_id("deviceid").text.split('\n')[1]
     except:
         logging.error("無法取得hostname資訊 " + IP)
         sys_host = "ERROR"
+
+    if healthCheck(IP):
+        driver.close()
 # ============= sn, sys_ver =============
     try:
         driver.get("https://" + IP +
@@ -195,11 +299,26 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_sn, sys_ver = [item.text for item in items][1:3]
     except:
         logging.error("無法取得 S/N 或版本資訊 " + IP)
+        
+    if healthCheck(IP):
+        driver.close()
 # ============= ucs, qkview =============
     # t1 = threading.Thread(target=get_qkview, args=(client,sys_host))
     # t2 = threading.Thread(target=get_ucs, args=(client,sys_host))
     # t1.start()
     # t2.start()
+
+    if healthCheck(IP):
+        driver.close()
+# ============= syslog =============
+    t3 = threading.Thread(target=ltm, args=(IP,ACC,PASS))
+    t4 = threading.Thread(target=syst, args=(IP,ACC,PASS))
+
+    t3.start()
+    t4.start()
+
+    if healthCheck(IP):
+        driver.close()    
 # ============= uptime =============
     try:
         driver.get("https://" + IP +
@@ -210,6 +329,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_uptime = uptime_text[0] + ' ' + uptime_text[1]
     except:
         logging.error("無法取得uptime資訊 " + IP)
+
+    if healthCheck(IP):
+        driver.close()
 # ============= certificate =============
     try:
         driver.get("https://" + IP +
@@ -242,6 +364,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             # [print(item) for item in near_expired]
     except:
         logging.error("無法取得憑證資訊 " + IP)
+
+    if healthCheck(IP):
+        driver.close()
 # ============= NTP =============
     try:
         driver.get("https://" + IP +
@@ -257,6 +382,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_ntp = "OK"
     except:
         logging.error("無法取得NTP資訊 " + IP)
+
+    if healthCheck(IP):
+        driver.close()
 # ============= SNMP =============
     try:
         driver.get("https://" + IP +
@@ -272,6 +400,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_snmp = "OK"
     except:
         logging.error("無法取得SNMP資訊 " + IP)
+
+    if healthCheck(IP):
+        driver.close()
 # ============= mem =============
     try:
         driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
@@ -323,6 +454,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_tp = change_unit(minimum * 8) + " ~ " + change_unit(maxium * 8)
     except:
         logging.error("無法取得 throughput " + IP)
+
+    if healthCheck(IP):
+        driver.close()
 # ============= active connection =============
     try:
         driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
@@ -333,7 +467,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         ac = np.array(df["curclientconns"].values.tolist())
         maxium = int(round(max(ac)))
         minimum = int(round(min(ac)))
-        sys_ac = str(minimum) + " ~ " + str(maxium) + "/s"
+        sys_ac = change_unit(minimum, "/sec") + " ~ " + change_unit(maxium, "/sec")
     except:
         logging.error("無法取得 active connection " + IP)
 # ============= new connection =============
@@ -341,16 +475,27 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         nc = np.array(df["totclientconns"].values.tolist())
         maxium = int(round(max(nc)))
         minimum = int(round(min(nc)))
-        sys_nc = str(minimum) + " ~ " + str(maxium) + "/s"
+        sys_nc = change_unit(minimum,"/sec") + " ~ " + change_unit(maxium,"/sec")
     except:
         logging.error("無法取得 new connection " + IP)
+
+    if healthCheck(IP):
+        driver.close()
 # ============= end =============
     shutil.rmtree(IP, ignore_errors=True)
+    shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
     driver.close()
     # t1.join()
     # t2.join()
     # sys_qkview = "OK" if os.path.exists("C:\\qkviews\\" + sys_host + '_' + now + ".qkview") else "ERROR"
     # sys_ucs = "OK" if os.path.exists("C:\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"
+    t3.join()
+    t4.join()
+    d = os.listdir()
+    for item in d:
+        if item[:len(IP)] == IP and item[-7:] == "ERR.log":
+            sys_log = "ERROR"
+            break
 
     outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp,
              sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
@@ -366,17 +511,20 @@ if __name__ == "__main__":
     process_count = 0
     devices = pd.read_excel("SMO_ex.xls").values.tolist()
     try:
-        os.chdir("\\")
-        os.system("mkdir qkviews, ucs")
-        os.chdir(PATH)
-    except:
-        print("please run as administrator")
+        os.makedirs("qkviews")
+        os.makedirs("ucs")
+    except Exception as e:
+        print(e)
 
     for device in devices:
         process_count += 1
         IP = device[0]
         ACCOUNT = device[1]
         PASSWD = device[2]
+        try:
+            os.makedirs(IP + "_log")
+        except:
+            pass
         t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 20))
         threads.append(t)
         t.start()

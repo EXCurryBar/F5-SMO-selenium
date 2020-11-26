@@ -10,7 +10,6 @@
     numpy == 1.18.5
     pandas == 1.1.2
     paramiko == 2.7.2
-    requests == 2.24.0
     scp == 0.13.2
     selenium == 3.141.0
 需要安裝函式庫時運行:
