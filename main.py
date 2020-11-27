@@ -227,7 +227,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     else:
         print("\n無法連線到 " + IP)
         pass_count += 1
-        # shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+        shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
         return
 
     sys_host = "ERROR"
