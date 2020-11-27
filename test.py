@@ -1,13 +1,28 @@
-import paramiko
-from scp import SCPClient
-import os
 import re
+import os
+import csv
 import gzip
+import socket
 import shutil
+import logging
+import paramiko
 import threading
+import numpy as np
+import pandas as pd
+from docx import Document
+from docx.shared import Pt
+from docx.oxml.ns import qn
+from scp import SCPClient
+from time import sleep, time
+from datetime import datetime
+from selenium import webdriver
+from selenium.webdriver.support.ui import Select
+
+
+sleep_time = 10
 
 PATH = os.path.abspath(os.getcwd())
-IP = "192.168.51.160"
+IP = "192.168.51.192"
 ACC = "admin"
 PASS = "admin"
 try:
@@ -96,16 +111,51 @@ def syst():
 
 
 if __name__ == "__main__":
-    t1 = threading.Thread(target=ltm)
-    t2 = threading.Thread(target=syst)
-    t1.start()
-    t2.start()
+    options = webdriver.ChromeOptions()
+    options.add_argument('ignore-certificate-errors')
+    options.add_argument('--ignore-ssl-errors')
+    options.add_argument("--disable-extensions")
 
-    t1.join()
-    t2.join()
-    shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+    driver = webdriver.Chrome(chrome_options=options, executable_path=PATH + "\\chromedriver.exe")
+    driver.get("https://" + IP + "/tmui/login.jsp")
+    driver.find_element_by_id("username").send_keys(ACC)
+    driver.find_element_by_id("passwd").send_keys(PASS)
+    driver.find_element_by_xpath("//button[1]").click()
+    sleep(sleep_time)
 
-    d = os.listdir()
-    for item in d:
-        if item[:len(IP)] == IP and item[-7:] == "ERR.log":
-            print(item)
+
+
+    try:
+        time_device = driver.find_element_by_id("dateandtime")
+        system_time = time_device.text.split('\n')[-1].split(' ')[0:2]
+        sys_time_hr, sys_time_min = system_time[0].split(':')
+        sys_time_hr = str(int(sys_time_hr) + 12 * int(system_time[1] == "PM"))
+        system_time = sys_time_hr.zfill(2)+':'+sys_time_min.zfill(2)
+        local_time = datetime.strftime(datetime.now(), "%H:%M")
+
+        loc_time_hr = int(local_time.split(':')[0])
+        loc_time_min = int(local_time.split(':')[1])
+
+        diff_hr = int(sys_time_hr) - loc_time_hr
+        diff_min = int(sys_time_min) - loc_time_min
+
+        diff_time = diff_min + diff_hr * 60
+
+        if diff_time > 0:
+            sys_time = "快" + (str(diff_hr) + "小時") * diff_hr + str(diff_min) + "分鐘"
+        elif diff_time < 0:
+            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * abs(diff_hr) + str(abs(diff_min)) + "分鐘"
+        else:
+            sys_time = "OK"
+        
+    except:
+        logging.error("無法獲取時間資訊 " + IP)
+        sys_time = "ERROR"
+
+    print(sys_time)
+
+
+
+
+
+    driver.close()

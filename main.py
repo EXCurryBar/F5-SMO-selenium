@@ -154,11 +154,11 @@ def ltm(IP, ACC, PASS):
         with open(IP + "_VS_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
 
-    # == Pool monitor down
-    # P = re.compile("\n.*Pool.*status down.*\n")
+    # == Template
+    # P = re.compile("\n.<這裡輸入log特徵>.*\n")
     # res = re.findall(P, log)
     # if len(res) != 0:
-    #     with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
+    #     with open(IP + "_<這裡輸入錯誤名稱>_ERR.log", "w", newline='') as ef:
     #         ef.writelines(res)
 
 
@@ -190,6 +190,13 @@ def syst(IP, ACC, PASS):
     with open(IP+"_log\\messages.log", "r", encoding='UTF-8') as lf:
         log = lf.read()
 
+    # == Template
+    # P = re.compile("\n.<這裡輸入log特徵>.*\n")
+    # res = re.findall(P, log)
+    # if len(res) != 0:
+    #     with open(IP + "_<這裡輸入錯誤名稱>_ERR.log", "w", newline='') as ef:
+    #         ef.writelines(res)
+
 
 def healthCheck(IP):
     global pass_count
@@ -220,7 +227,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     else:
         print("\n無法連線到 " + IP)
         pass_count += 1
-        shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+        # shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
         return
 
     sys_host = "ERROR"
@@ -262,15 +269,29 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_time_hr, sys_time_min = system_time[0].split(':')
         sys_time_hr = str(int(sys_time_hr) + 12 * int(system_time[1] == "PM"))
         system_time = sys_time_hr.zfill(2)+':'+sys_time_min.zfill(2)
-
         local_time = datetime.strftime(datetime.now(), "%H:%M")
-        sys_time = "OK" if system_time == local_time else "NO"
+
+        loc_time_hr = int(local_time.split(':')[0])
+        loc_time_min = int(local_time.split(':')[1])
+
+        diff_hr = int(sys_time_hr) - loc_time_hr
+        diff_min = int(sys_time_min) - loc_time_min
+
+        diff_time = diff_min + diff_hr * 60
+
+        if diff_time > 0:
+            sys_time = "快" + (str(diff_hr) + "小時") * diff_hr + str(diff_min) + "分鐘"
+        elif diff_time < 0:
+            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * abs(diff_hr) + str(abs(diff_min)) + "分鐘"
+        else:
+            sys_time = "OK"
     except:
         logging.error("無法獲取時間資訊 " + IP)
         sys_time = "ERROR"
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= ha =============
     try:
         sys_ha = driver.find_element_by_id("status").text.split('\n')[-1]
@@ -280,6 +301,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= hostname =============
     try:
         sys_host = driver.find_element_by_id("deviceid").text.split('\n')[1]
@@ -289,6 +311,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= sn, sys_ver =============
     try:
         driver.get("https://" + IP +
@@ -302,6 +325,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         
     if healthCheck(IP):
         driver.close()
+        return
 # ============= ucs, qkview =============
     t1 = threading.Thread(target=get_qkview, args=(client,sys_host))
     t2 = threading.Thread(target=get_ucs, args=(client,sys_host))
@@ -310,6 +334,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= syslog =============
     t3 = threading.Thread(target=ltm, args=(IP,ACC,PASS))
     t4 = threading.Thread(target=syst, args=(IP,ACC,PASS))
@@ -318,7 +343,8 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     t4.start()
 
     if healthCheck(IP):
-        driver.close()    
+        driver.close()
+        return    
 # ============= uptime =============
     try:
         driver.get("https://" + IP +
@@ -332,6 +358,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= certificate =============
     try:
         driver.get("https://" + IP +
@@ -367,6 +394,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= NTP =============
     try:
         driver.get("https://" + IP +
@@ -385,6 +413,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= SNMP =============
     try:
         driver.get("https://" + IP +
@@ -403,6 +432,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= mem =============
     try:
         driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
@@ -457,6 +487,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= active connection =============
     try:
         driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
@@ -481,6 +512,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 
     if healthCheck(IP):
         driver.close()
+        return
 # ============= end =============
     shutil.rmtree(IP, ignore_errors=True)
     shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
@@ -526,14 +558,14 @@ if __name__ == "__main__":
             os.makedirs(IP + "_log")
         except:
             pass
-        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 25))
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 20))
         threads.append(t)
         t.start()
         if process_count == 4:
             t.join()
             process_count = 0
 
-    while(pass_count!=len(devices)):
+    while(pass_count<len(devices)):
         sleep(1)
         
     csvfile.close()
