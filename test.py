@@ -22,9 +22,9 @@ from selenium.webdriver.support.ui import Select
 sleep_time = 10
 
 PATH = os.path.abspath(os.getcwd())
-IP = "192.168.51.192"
-ACC = "admin"
-PASS = "admin"
+IP = "192.168.51.211"
+ACC = "dynasafe"
+PASS = "Dyna0808"
 try:
     os.makedirs(IP + "_log")
 except Exception as e:
@@ -59,27 +59,48 @@ def ltm():
     with open(IP+"_log\\ltm.log", "r", encoding='UTF-8') as lf:
         log = lf.read()
 
-    # == HA state change
+# == HA state change
     P = re.compile("\n.*HA unit.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "w", newline='') as ef:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
-    # == VS state change
+    P = re.compile("\n.*No failover status messages received for.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+
+    P = re.compile("\n.*Active\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+
+    P = re.compile("\n.*Offline\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+
+    P = re.compile("\n.*Standby\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+# == VS state change
     P = re.compile("\n.*Virtual Address .*GREEN to RED.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
         with open(IP + "_VS_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
-
-    # == Pool monitor down
-    # P = re.compile("\n.*Pool.*status down.*\n")
-    # res = re.findall(P, log)
-    # if len(res) != 0:
-    #     with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
-    #         ef.writelines(res)
-
+# == Pool
+    P = re.compile("\n.*Pool.*status down.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
+            ef.writelines(res)
 
 def syst():
     try:
@@ -110,8 +131,11 @@ def syst():
         log = lf.read()
 
 
-if __name__ == "__main__":
+def cert(IP, ACC, PASS):
+    today = datetime.today()
     options = webdriver.ChromeOptions()
+    prefs = {"download.default_directory": PATH + "\\" + IP}
+    options.add_experimental_option("prefs", prefs)
     options.add_argument('ignore-certificate-errors')
     options.add_argument('--ignore-ssl-errors')
     options.add_argument("--disable-extensions")
@@ -122,40 +146,48 @@ if __name__ == "__main__":
     driver.find_element_by_id("passwd").send_keys(PASS)
     driver.find_element_by_xpath("//button[1]").click()
     sleep(sleep_time)
-
-
-
     try:
-        time_device = driver.find_element_by_id("dateandtime")
-        system_time = time_device.text.split('\n')[-1].split(' ')[0:2]
-        sys_time_hr, sys_time_min = system_time[0].split(':')
-        sys_time_hr = str(int(sys_time_hr) + 12 * int(system_time[1] == "PM"))
-        system_time = sys_time_hr.zfill(2)+':'+sys_time_min.zfill(2)
-        local_time = datetime.strftime(datetime.now(), "%H:%M")
+        driver.get("https://" + IP +
+                   "/tmui/Control/jspmap/tmui/locallb/ssl_certificate/list.jsp?&startListIndex=0&showAll=true")
+        sleep(sleep_time*3)
+        driver.switch_to.frame(driver.find_element_by_id("contentframe"))
 
-        loc_time_hr = int(local_time.split(':')[0])
-        loc_time_min = int(local_time.split(':')[1])
+        certificates = driver.find_element_by_id("list_body").text.split('\n')
 
-        diff_hr = int(sys_time_hr) - loc_time_hr
-        diff_min = int(sys_time_min) - loc_time_min
-
-        diff_time = diff_min + diff_hr * 60
-
-        if diff_time > 0:
-            sys_time = "快" + (str(diff_hr) + "小時") * diff_hr + str(diff_min) + "分鐘"
-        elif diff_time < 0:
-            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * abs(diff_hr) + str(abs(diff_min)) + "分鐘"
+        expired = []
+        near_expired = []
+        for i in range(len(certificates)):
+            if(len(certificates[i]) < 13 and certificates[i] != "Common"):
+                d1 = datetime.strptime(certificates[i], "%b %d, %Y")
+                if d1 < today:
+                    expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
+                elif d1 >= today:
+                    near_expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
+        if len(expired) == 0 and len(near_expired) == 0:
+            sys_cert = "OK"
         else:
-            sys_time = "OK"
-        
-    except:
-        logging.error("無法獲取時間資訊 " + IP)
-        sys_time = "ERROR"
-
-    print(sys_time)
-
-
-
-
+            sys_cert = "expired: " + str(len(expired)) + " near expire:" + str(len(near_expired))
+            with open(IP+"_Certificate.txt","w",encoding="utf-8") as cert_file:
+                cert_file.write("Near Expire:\n")
+                [cert_file.write(row + "\n") for row in near_expired]
+                cert_file.write("\nExpired:\n")
+                [cert_file.write(row + "\n") for row in expired]
+            # print("已過期:",len(expired))
+            # [print(item) for item in expired]
+            # print("快過期:",len(near_expired))
+            # [print(item) for item in near_expired]
+    except Exception as e:
+        logging.error("無法取得憑證資訊 " + IP + str(e))
 
     driver.close()
+
+if __name__ == "__main__":
+    # cert(IP, ACC, PASS)
+    t1 = threading.Thread(target=ltm)
+    t2 = threading.Thread(target=syst)
+    t1.start()
+    t2.start()
+
+    t1.join()
+    t2.join()
+    shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)

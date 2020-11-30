@@ -1,3 +1,30 @@
+#
+#                       _oo0oo_
+#                      o8888888o
+#                      88" . "88
+#                      (| -_- |)
+#                      0\  =  /0
+#                    ___/`---'\___
+#                  .' \\|     |# '.
+#                 / \\|||  :  |||# \
+#                / _||||| -:- |||||- \
+#               |   | \\\  -  #/ |   |
+#               | \_|  ''\---/''  |_/ |
+#               \  .-\__  '-'  ___/-. /
+#             ___'. .'  /--.--\  `. .'___
+#          ."" '<  `.___\_<|>_/___.' >' "".
+#         | | :  `- \`.;`\ _ /`;.`/ - ` : | |
+#         \  \ `_.   \_ __\ /__ _/   .-` /  /
+#     =====`-.____`.___ \_____/___.-`___.-'=====
+#                       `=---='
+#
+#
+#     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+#               佛祖保佑         永无BUG
+#
+#
+#
 # ============ import thingie =============
 import re
 import os
@@ -139,19 +166,48 @@ def ltm(IP, ACC, PASS):
     log = ""
     with open(IP+"_log\\ltm.log", "r", encoding='UTF-8') as lf:
         log = lf.read()
-
-    # == HA state change
+# == HA state change
     P = re.compile("\n.*HA unit.*\n")
     res = re.findall(P, log)
+
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "w", newline='') as ef:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
-    # == VS state change
+    P = re.compile("\n.*No failover status messages received for.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+
+    P = re.compile("\n.*Active.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+
+    P = re.compile("\n.*Offline.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+
+    P = re.compile("\n.*Standby.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+            ef.writelines(res)
+# == VS state change
     P = re.compile("\n.*Virtual Address .*GREEN to RED.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
         with open(IP + "_VS_ERR.log", "w", newline='') as ef:
+            ef.writelines(res)
+# == Pool
+    P = re.compile("\n.*Pool.*GREEN to RED.*\n")
+    res = re.findall(P, log)
+    if len(res) != 0:
+        with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
 
     # == Template
@@ -256,7 +312,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     options.add_argument('--ignore-ssl-errors')
     options.add_argument("--disable-extensions")
 
-    driver = webdriver.Chrome(chrome_options=options)
+    driver = webdriver.Chrome(chrome_options=options, executable_path=PATH + "\\chromedriver.exe")
     driver.get("https://" + IP + "/tmui/login.jsp")
     driver.find_element_by_id("username").send_keys(ACC)
     driver.find_element_by_id("passwd").send_keys(PASS)
@@ -373,9 +429,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             if(len(certificates[i]) < 13 and certificates[i] != "Common"):
                 d1 = datetime.strptime(certificates[i], "%b %d, %Y")
                 if d1 < today:
-                    expired.append(certificates[i-1].split(' ')[0])
+                    expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
                 elif d1 >= today:
-                    near_expired.append(certificates[i-1].split(' ')[0])
+                    near_expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
         if len(expired) == 0 and len(near_expired) == 0:
             sys_cert = "OK"
         else:
