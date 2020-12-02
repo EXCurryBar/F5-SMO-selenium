@@ -22,9 +22,9 @@ from selenium.webdriver.support.ui import Select
 sleep_time = 10
 
 PATH = os.path.abspath(os.getcwd())
-IP = "192.168.51.211"
-ACC = "dynasafe"
-PASS = "Dyna0808"
+IP = "192.168.51.192"
+ACC = "admin"
+PASS = "admin"
 try:
     os.makedirs(IP + "_log")
 except Exception as e:
@@ -172,10 +172,6 @@ def cert(IP, ACC, PASS):
                 [cert_file.write(row + "\n") for row in near_expired]
                 cert_file.write("\nExpired:\n")
                 [cert_file.write(row + "\n") for row in expired]
-            # print("已過期:",len(expired))
-            # [print(item) for item in expired]
-            # print("快過期:",len(near_expired))
-            # [print(item) for item in near_expired]
     except Exception as e:
         logging.error("無法取得憑證資訊 " + IP + str(e))
 

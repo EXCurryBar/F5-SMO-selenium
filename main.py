@@ -180,19 +180,19 @@ def ltm(IP, ACC, PASS):
         with open(IP + "_HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
-    P = re.compile("\n.*Active.*\n")
+    P = re.compile("\n.*Active\n")
     res = re.findall(P, log)
     if len(res) != 0:
         with open(IP + "_HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
-    P = re.compile("\n.*Offline.*\n")
+    P = re.compile("\n.*Offline\n")
     res = re.findall(P, log)
     if len(res) != 0:
         with open(IP + "_HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
-    P = re.compile("\n.*Standby.*\n")
+    P = re.compile("\n.*Standby\n")
     res = re.findall(P, log)
     if len(res) != 0:
         with open(IP + "_HA_ERR.log", "a", newline='') as ef:
@@ -338,7 +338,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         if diff_time > 0:
             sys_time = "快" + (str(diff_hr) + "小時") * diff_hr + str(diff_min) + "分鐘"
         elif diff_time < 0:
-            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * abs(diff_hr) + str(abs(diff_min)) + "分鐘"
+            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * int(abs(diff_hr) > 0) + str(abs(diff_min)) + "分鐘"
         else:
             sys_time = "OK"
     except:
@@ -441,10 +441,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
                 [cert_file.write(row + "\n") for row in near_expired]
                 cert_file.write("\nExpired:\n")
                 [cert_file.write(row + "\n") for row in expired]
-            # print("已過期:",len(expired))
-            # [print(item) for item in expired]
-            # print("快過期:",len(near_expired))
-            # [print(item) for item in near_expired]
     except:
         logging.error("無法取得憑證資訊 " + IP)
 
@@ -614,7 +610,7 @@ if __name__ == "__main__":
             os.makedirs(IP + "_log")
         except:
             pass
-        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 20))
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 25))
         threads.append(t)
         t.start()
         if process_count == 4:
