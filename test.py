@@ -22,16 +22,12 @@ from selenium.webdriver.support.ui import Select
 sleep_time = 10
 
 PATH = os.path.abspath(os.getcwd())
-IP = "192.168.51.192"
-ACC = "admin"
-PASS = "admin"
-try:
-    os.makedirs(IP + "_log")
-except Exception as e:
-    print(e)
+# try:
+#     os.makedirs(IP + "_log")
+# except Exception as e:
+#     print(e)
 
-
-def ltm():
+def ltm(IP, ACC, PASS):
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -53,56 +49,68 @@ def ltm():
     except Exception as e:
         print(e)
         return
-    with open(IP+"_log\\ltm.log", "w", encoding='UTF-8') as lf:
-        lf.write(log)
-    log = ""
-    with open(IP+"_log\\ltm.log", "r", encoding='UTF-8') as lf:
-        log = lf.read()
-
+    # log = str(log)
 # == HA state change
     P = re.compile("\n.*HA unit.*\n")
     res = re.findall(P, log)
+
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*No failover status messages received for.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*Active\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*Offline\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*Standby\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 # == VS state change
     P = re.compile("\n.*Virtual Address .*GREEN to RED.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_VS_ERR.log", "w", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\VS_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
 # == Pool
-    P = re.compile("\n.*Pool.*status down.*\n")
+    P = re.compile("\n.*Pool.*GREEN to RED.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\Pool_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
 
-def syst():
+    # == Template
+    # P = re.compile("\n.<這裡輸入log特徵>.*\n")
+    # res = re.findall(P, log)
+    # if len(res) != 0:        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+    #     with open(IP+"_ERR_LOG\\<這裡輸入錯誤名稱>_ERR.log", "a", newline='') as ef:
+    #         ef.writelines(res)
+
+
+
+def syst(IP, ACC, PASS):
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -124,11 +132,7 @@ def syst():
     except Exception as e:
         print(e)
         return
-    with open(IP+"_log\\messages.log", "w", encoding='UTF-8') as lf:
-        lf.write(log)
-    log = ""
-    with open(IP+"_log\\messages.log", "r", encoding='UTF-8') as lf:
-        log = lf.read()
+    # log = str(log)
 
 
 def cert(IP, ACC, PASS):
@@ -177,13 +181,56 @@ def cert(IP, ACC, PASS):
 
     driver.close()
 
+
+def getTime(client):
+    try:
+        start = time()
+        _, stdout, _ = client.exec_command("date")
+        end = time()
+
+        local_time = datetime.strftime(datetime.now(), "%H:%M:%S")
+
+        sys_time_hr, sys_time_min, sys_time_sec = stdout.readlines()[0].split(' ')[4].split(':')
+        
+
+        loc_time_hr = int(local_time.split(':')[0])
+        loc_time_min = int(local_time.split(':')[1])
+        loc_time_sec = int(local_time.split(':')[2])
+
+        diff_hr = int(sys_time_hr) - loc_time_hr
+        diff_min = int(sys_time_min) - loc_time_min
+        diff_sec = int(sys_time_sec) - loc_time_sec
+
+        diff_time = diff_sec + diff_min * 60 + diff_hr * 3600
+
+        if diff_time > 0:
+            sys_time = "快" + (str(diff_hr) + "小時") * int(diff_hr != 0) + (str(diff_min) + "分鐘") * int(diff_min != 0) + str(diff_sec) + "秒"
+        elif diff_time < 0:
+            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * int(diff_hr != 0) + (str(abs(diff_min)) + "分鐘") * int(diff_min != 0) + str(diff_sec) + "秒"
+        else:
+            sys_time = "OK"
+        print(end - start)
+        print(sys_time)
+    except Exception as e:
+        print(e)
+        return
+
+
 if __name__ == "__main__":
     # cert(IP, ACC, PASS)
-    t1 = threading.Thread(target=ltm)
-    t2 = threading.Thread(target=syst)
-    t1.start()
-    t2.start()
+    # t1 = threading.Thread(target=ltm, args=(IP, ACC, PASS))
+    # t2 = threading.Thread(target=syst, args=(IP, ACC, PASS))
+    # t1.start()
+    # t2.start()
 
-    t1.join()
-    t2.join()
-    shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+    # t1.join()
+    # t2.join()
+    # shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+    IP = "192.168.51.192"
+    ACC = "admin"
+    PASS = "admin"
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(IP, username=ACC, password=PASS)
+
+    getTime(client)

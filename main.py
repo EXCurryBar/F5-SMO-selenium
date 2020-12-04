@@ -59,6 +59,7 @@ logging.basicConfig(level=logging.WARNING,
 
 
 def words(ti, da, num):
+    # 這裡問henry
     global word_nn, doc, t0, filecount
     # print(ti, ": ", da)
     if word_nn == 1:
@@ -78,6 +79,7 @@ def words(ti, da, num):
 
 
 def paste(lst):
+    # 這裡問henry
     sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp, sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver = lst
     words("hostname", sys_host, 0)
     words("S/N", sys_sn, 1)
@@ -98,40 +100,48 @@ def paste(lst):
     words("Version", sys_ver, 16)
 
 
-def is_avail(IP, port=22):  # return True if device is reachable
+def is_avail(IP, port=22):
+    # is_avail(IP)       --> 如果22port能連接回傳True
+    # is_avail(IP, port) --> 如果指定port能連接回傳True
     try:
         host = socket.gethostbyname(IP)
-        s = socket.create_connection((host, port), 2)
+        s = socket.create_connection((host, port), 2)   # 檢查指定IP:port是否有回應，timeout 2 秒
         return True
     except:
         logging.error("無法連線到 " + IP)
     return False
 
 
-def get_qkview(client, hostname):  # generate qkview and saved at C:\qkview
+def get_qkview(client, hostname):
+    # 產生qkview然後存到 \qkviews
+    # 參數 client 用來進行ssh連線
+    # 參數 hostname 進行檔案命名
     try:
         stdin, stdout, stderr = client.exec_command(
-            "qkview;mv /var/tmp/"+hostname+".qkview /var/tmp/" + hostname + "_" + now + ".qkview")
-        dummy = stdout.readlines()
+            "qkview;mv /var/tmp/"+hostname+".qkview /var/tmp/" + hostname + "_" + now + ".qkview")  # 在底層下產生qkview的指令並重新命名為hostname_日期.qkview
+        dummy = stdout.readlines()  # 不加這行程式會繼續執行而不會等qkview產完
 
-        scp = SCPClient(client.get_transport())
-        scp.get("/shared/tmp/" + hostname + "_" + now + ".qkview", PATH + "\\qkviews\\"+ hostname + "_" + now + ".qkview")
+        scp = SCPClient(client.get_transport()) # 準備以scp協定傳輸檔案
+        scp.get("/shared/tmp/" + hostname + "_" + now + ".qkview", PATH + "\\qkviews\\"+ hostname + "_" + now + ".qkview")  # 將qkview 複製到本地端qkviews資料夾
         print(hostname, " Qkview saved")
-        client.exec_command("rm -rf /shared/tmp/" + hostname + "_" + now + ".qkview")
+        client.exec_command("rm -rf /shared/tmp/" + hostname + "_" + now + ".qkview")   # 移除此台f5上的qkview檔案
         return "OK"
     except:
         logging.error("無法取得Qkview " + IP)
         return "Error"
 
 
-def get_ucs(client, hostname):  # generate ucs and saved at C:\ucs
+def get_ucs(client, hostname):
+    # 產生ucs然後存到 \ucs
+    # 參數 client 用來進行ssh連線
+    # 參數 hostname 進行檔案命名
     try:
         stdin, stdout, stderr = client.exec_command(
-            "tmsh save /sys ucs /var/local/ucs/" + hostname + '_' + now + ".ucs")
-        dummy = stdout.readlines()
+            "tmsh save /sys ucs /var/local/ucs/" + hostname + '_' + now + ".ucs") # 在底層下產生ucs的指令並重新命名為hostname_日期.ucs
+        dummy = stdout.readlines()  # 不加這行程式會繼續執行而不會等ucs產完
 
-        scp = SCPClient(client.get_transport())
-        scp.get("/var/local/ucs/" + hostname + "_" + now + ".ucs", PATH + "\\ucs\\" + hostname + "_" + now + ".ucs")
+        scp = SCPClient(client.get_transport()) # 準備以scp協定傳輸檔案
+        scp.get("/var/local/ucs/" + hostname + "_" + now + ".ucs", PATH + "\\ucs\\" + hostname + "_" + now + ".ucs")    # 將ucs複製到本地端ucs資料夾
         print(hostname, " UCS saved")
         return "OK"
     except:
@@ -139,86 +149,89 @@ def get_ucs(client, hostname):  # generate ucs and saved at C:\ucs
         return "Error"
 
 
-def ltm(IP, ACC, PASS):
+def ltm(IP, ACC, PASS): 
+    # 找出錯誤log並儲存到 \IP_ERR_LOG中
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(IP, username=ACC, password=PASS)
-        _, stdout, _ = client.exec_command("cd /var/log; ls")
+        client.connect(IP, username=ACC, password=PASS)                 # 以paramiko進行ssh連線
+        _, stdout, _ = client.exec_command("cd /var/log; ls")           # 列出 /var/log目錄下所有檔案
 
-        lst = [line.replace('\n', '')
-               for line in stdout.readlines() if line[:3] == "ltm"]
         log = ""
-        scp = SCPClient(client.get_transport())
+        lst = [line.replace('\n', '') for line in stdout.readlines() if line[:3] == "ltm"]  # 尋找ltm log並儲存到lst中
+        scp = SCPClient(client.get_transport()) # 準備以scp協定傳輸檔案
         for line in lst:
-            scp.get("/var/log/" + line, PATH + "\\" + IP + "_log\\" + line)
-            if line[-2:] == "gz":
+            scp.get("/var/log/" + line, PATH + "\\" + IP + "_log\\" + line) # 取得/var/log中的ltm log
+            if line[-2:] == "gz":               # 如果該log為壓縮擋 則解壓縮再讀取
                 with gzip.open(IP+"_log\\"+line, "rb") as f_in:
-                    log += f_in.read().decode()
-            else:
-                with open(IP+"_log\\"+line, "rb") as f_in:
-                    log += f_in.read().decode()
+                    log += f_in.read().decode() # log字串增加讀取到的檔案內容
+            else:                               # 如果該log不是壓縮擋 則直接讀取
+                with open(IP+"_log\\"+line, "rb") as f_in:  
+                    log += f_in.read().decode() # log字串增加讀取到的檔案內容
     except Exception as e:
         print(e)
         return
-    with open(IP+"_log\\ltm.log", "w", encoding='UTF-8') as lf:
-        lf.write(log)
-    log = ""
-    with open(IP+"_log\\ltm.log", "r", encoding='UTF-8') as lf:
-        log = lf.read()
 # == HA state change
     P = re.compile("\n.*HA unit.*\n")
-    res = re.findall(P, log)
-
+    res = re.findall(P, log)    
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*No failover status messages received for.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*Active\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*Offline\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 
     P = re.compile("\n.*Standby\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_HA_ERR.log", "a", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\HA_ERR.log", "a", newline='') as ef:
             ef.writelines(res)
 # == VS state change
     P = re.compile("\n.*Virtual Address .*GREEN to RED.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_VS_ERR.log", "w", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\VS_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
 # == Pool
     P = re.compile("\n.*Pool.*GREEN to RED.*\n")
     res = re.findall(P, log)
     if len(res) != 0:
-        with open(IP + "_Pool_ERR.log", "w", newline='') as ef:
+        if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+        with open(IP+"_ERR_LOG\\Pool_ERR.log", "w", newline='') as ef:
             ef.writelines(res)
 
     # == Template
     # P = re.compile("\n.<這裡輸入log特徵>.*\n")
     # res = re.findall(P, log)
-    # if len(res) != 0:
-    #     with open(IP + "_<這裡輸入錯誤名稱>_ERR.log", "w", newline='') as ef:
+    # if len(res) != 0:        
+    #     if not os.path.exists(IP+"_ERR_LOG"): os.makedirs(IP+"_ERR_LOG") 
+    #     with open(IP+"_ERR_LOG\\<這裡輸入錯誤名稱>_ERR.log", "a", newline='') as ef:
     #         ef.writelines(res)
 
 
 def syst(IP, ACC, PASS):
+    # 找出錯誤log並儲存到 \IP_ERR_LOG中
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -240,21 +253,10 @@ def syst(IP, ACC, PASS):
     except Exception as e:
         print(e)
         return
-    with open(IP+"_log\\messages.log", "w", encoding='UTF-8') as lf:
-        lf.write(log)
-    log = ""
-    with open(IP+"_log\\messages.log", "r", encoding='UTF-8') as lf:
-        log = lf.read()
-
-    # == Template
-    # P = re.compile("\n.<這裡輸入log特徵>.*\n")
-    # res = re.findall(P, log)
-    # if len(res) != 0:
-    #     with open(IP + "_<這裡輸入錯誤名稱>_ERR.log", "w", newline='') as ef:
-    #         ef.writelines(res)
 
 
 def healthCheck(IP):
+    # check if device is alive
     global pass_count
     if not (is_avail(IP) and is_avail(IP, 443)):
         shutil.rmtree(IP, ignore_errors=True)
@@ -265,6 +267,7 @@ def healthCheck(IP):
 
 
 def change_unit(value, unit = "bps"):
+    # 1000 --> 1k<unit>, 1000000 --> 1M<unit> ...
     scale = ['', 'k', 'M', 'G', 'T']
     count = 0
     while(value/1000 >= 1):
@@ -274,18 +277,25 @@ def change_unit(value, unit = "bps"):
 
 
 def get_data(IP, ACC, PASS, sleep_time=5):
-
+    # IP            --> 設備IP
+    # ACC           --> 設備帳號
+    # PASS          --> 設備密碼
+    # sleep_time    --> 每步delay時間，預設5秒
     global pass_count
-    if is_avail(IP) and is_avail(IP, 443):
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    if is_avail(IP) and is_avail(IP, 443):  # 先判斷22 443能不能連線
+        client = paramiko.SSHClient()       # 如果可以則先宣告ssh client
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())    # 問henry
         client.connect(IP, 22, username=ACC, password=PASS, timeout=10)
-    else:
+        try:
+            os.makedirs(IP + "_log")        # 建立log資料夾
+        except:
+            pass
+    else:                                   # 若無法連線
         print("\n無法連線到 " + IP)
-        pass_count += 1
-        shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+        pass_count += 1                     # 通過計數+1
         return
-
+    
+    # 初始化表格資料，因為收集到資料才會改動，所以宣告為ERROR
     sys_host = "ERROR"
     sys_sn = "ERROR"
     sys_ver = "ERROR"
@@ -303,8 +313,10 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     sys_nc = "ERROR"
     sys_tp = "ERROR"
 # FIXING ========
+    # 待更新
     sys_log = "OK"
 # =============
+    # 初始化 selenium
     options = webdriver.ChromeOptions()
     prefs = {"download.default_directory": PATH + "\\" + IP}
     options.add_experimental_option("prefs", prefs)
@@ -336,9 +348,9 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         diff_time = diff_min + diff_hr * 60
 
         if diff_time > 0:
-            sys_time = "快" + (str(diff_hr) + "小時") * diff_hr + str(diff_min) + "分鐘"
+            sys_time = "快" + (str(diff_hr) + "小時") * int(diff_hr != 0) + str(diff_min) + "分鐘"
         elif diff_time < 0:
-            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * int(abs(diff_hr) > 0) + str(abs(diff_min)) + "分鐘"
+            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * int(diff_hr != 0) + str(abs(diff_min)) + "分鐘"
         else:
             sys_time = "OK"
     except:
@@ -508,7 +520,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_mem = str(mem_min) + "% ~ " + str(mem_max) + "%"
 
     except :
-        logging.error("無法取得記憶體用量" + IP)
+        logging.error("無法取得記憶體用量 " + IP)
 # ============= cpu =============
     try:
         cpu = df[["Ruser", "Rniced","Rsystem","Ridle","Rirq","Rsoftirq","Riowait"]]
@@ -527,7 +539,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_cpu = str(cpu_min) + "% ~ " + str(cpu_max) + "%"
 
     except :
-        logging.error("無法取得CPU用量" + IP)
+        logging.error("無法取得CPU用量 " + IP)
 # ============= throughput =============
     try:
         tp = np.array(df["tput_bytes_in"].values.tolist())
@@ -568,6 +580,8 @@ def get_data(IP, ACC, PASS, sleep_time=5):
 # ============= end =============
     shutil.rmtree(IP, ignore_errors=True)
     shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)
+    if len(os.listdir(IP+"_ERR_LOG"))==0:
+        shutil.rmtree(PATH + "\\" + IP + "_ERR_LOG", ignore_errors=True)
     driver.close()
     t1.join()
     t2.join()
@@ -575,7 +589,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     sys_ucs = "OK" if os.path.exists(PATH + "\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"
     t3.join()
     t4.join()
-    d = os.listdir()
+    d = os.listdir(IP+"_ERR_LOG")
     for item in d:
         if item[:len(IP)] == IP and item[-7:] == "ERR.log":
             sys_log = "ERROR"
@@ -584,55 +598,52 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp,
              sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
     writer.writerow(outgo)
-    print(IP+" 蒐集完畢")
+    print(IP + " 蒐集完畢")
     pass_count += 1
 
 
 if __name__ == "__main__":
     global doc, t0, word_nn, filecount, pass_count
-    threads = []
+    # doc, t0, word_nn  --> 問henry
+    # filecount         --> 寫檔案用於文件編號
+    # pass_count        --> 用於計算執行完畢數量
     pass_count = 0
-    process_count = 0
-    devices = pd.read_excel("SMO_ex.xls").values.tolist()
+    filecount = 0
+    process_count = 0 # --> 計算同時進行的執行續數量
+    devices = pd.read_excel("SMO_ex.xls").values.tolist()   # 讀取excel中的IP、帳號、密碼並儲存於devices中
 
     try:
         os.makedirs("qkviews")
-        os.makedirs("ucs")
+        os.makedirs("ucs")      # 新增ucs、qkviews資料夾用於存放資料
     except Exception as e:
         print(e)
 
-    for device in devices:
-        process_count += 1
+    for device in devices:      # 逐項抓取設備
+        process_count += 1      # 執行續計數+1
         IP = device[0]
         ACCOUNT = device[1]
-        PASSWD = device[2]
-        try:
-            os.makedirs(IP + "_log")
-        except:
-            pass
-        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 25))
-        threads.append(t)
+        PASSWD = device[2]      # 抓取設備IP、帳號、密碼
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 25)) # 開啟一個執行續 設定get_data參數延遲25秒(lab太慢)
         t.start()
-        if process_count == 4:
+        if process_count == 4:  # 限制同時搜尋4台設備
             t.join()
-            process_count = 0
+            process_count = 0   # 等待其中一台搜尋完畢重設process_count
 
-    while(pass_count<len(devices)):
+    while(pass_count<len(devices)): # 等待全部設備搜尋完畢再繼續
         sleep(1)
         
-    csvfile.close()
-    filecount = 0
-    data_lst = []
+    csvfile.close()             # 關閉收集資料檔
+    data_lst = []               # 設定資料暫存的list
     with open("data.csv", "r", encoding="utf-8") as csvf:
         data = csv.reader(csvf)
         for line in data:
-            data_lst.append(line)
+            data_lst.append(line)   # 將資料存放到list中
 
     for row in range(len(data_lst)):
         if row % 4 == 0:
             doc = Document('example.docx')
             doc.styles['Normal'].font.name = "Times New Roman"
-            doc.styles['Normal'].font.size = Pt(10)
+            doc.styles['Normal'].font.size = Pt(10) 
             t0 = doc.tables[0]
             word_nn = 1
             filecount += 1
