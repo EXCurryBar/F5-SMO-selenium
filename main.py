@@ -37,6 +37,7 @@ import paramiko
 import threading
 import numpy as np
 import pandas as pd
+from progressbar import ProgressBar
 from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
@@ -48,6 +49,7 @@ from selenium.webdriver.support.ui import Select
 
 # ============= initialize thingie ============
 PATH = os.path.abspath(os.getcwd())
+pbar = ProgressBar()
 csvfile = open("data.csv", "a", newline='', encoding='UTF-8')
 writer = csv.writer(csvfile)
 now = datetime.now().strftime("%Y%m%d")
@@ -107,8 +109,8 @@ def is_avail(IP, port=22):
         s = socket.create_connection((host, port), 2)   # 檢查指定IP:port是否有回應，timeout 2 秒
         return True
     except:
-        logging.error("無法連線到 " + IP)
-    return False
+        # logging.error("無法連線到 " + IP)
+        return False
 
 
 def get_qkview(client, hostname):
@@ -259,8 +261,8 @@ def healthCheck(IP):
     global pass_count
     if not (is_avail(IP) and is_avail(IP, 443)):
         shutil.rmtree(IP, ignore_errors=True)
-        pass_count += 1
         logging.error("與 " + IP + " 連線中斷")
+        pass_count += 1
         return True
     return False
 
@@ -275,11 +277,10 @@ def change_unit(value, unit = "bps"):
     return str(value)+scale[count]+unit
 
 
-def get_data(IP, ACC, PASS, sleep_time=5):
+def get_data(IP, ACC, PASS):
     # IP            --> 設備IP
     # ACC           --> 設備帳號
     # PASS          --> 設備密碼
-    # sleep_time    --> 每步delay時間，預設5秒
     global pass_count
     if is_avail(IP) and is_avail(IP, 443):  # 先判斷22 443能不能連線
         client = paramiko.SSHClient()       # 如果可以則先宣告ssh client
@@ -328,74 +329,77 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     driver.find_element_by_id("username").send_keys(ACC)# 輸入帳號
     driver.find_element_by_id("passwd").send_keys(PASS) # 輸入密碼
     driver.find_element_by_xpath("//button[1]").click()
-    sleep(sleep_time)                                   # 等待UI載入
 # ============= time =============
-    try:
-        time_device = driver.find_element_by_id("dateandtime")                  # 抓取f5 UI介面上的時間字串
-        system_time = time_device.text.split('\n')[-1].split(' ')[0:2]
-        sys_time_hr, sys_time_min = system_time[0].split(':')                   # 分出時、分
-        sys_time_hr = str(int(sys_time_hr) + 12 * int(system_time[1] == "PM"))  # 將 '時' 轉換成24小時制
-        local_time = datetime.strftime(datetime.now(), "%H:%M")                 # 抓取本機時間
+    while not healthCheck(IP):
+        try:
+            time_device = driver.find_element_by_id("dateandtime")                  # 抓取f5 UI介面上的時間字串
+            system_time = time_device.text.split('\n')[-1].split(' ')[0:2]
+            sys_time_hr, sys_time_min = system_time[0].split(':')                   # 分出時、分
+            sys_time_hr = str(int(sys_time_hr) + 12 * int(system_time[1] == "PM"))  # 將 '時' 轉換成24小時制
+            local_time = datetime.strftime(datetime.now(), "%H:%M")                 # 抓取本機時間
 
-        loc_time_hr = int(local_time.split(':')[0])
-        loc_time_min = int(local_time.split(':')[1])                            # 分出時、分
+            loc_time_hr = int(local_time.split(':')[0])
+            loc_time_min = int(local_time.split(':')[1])                            # 分出時、分
 
-        diff_hr = int(sys_time_hr) - loc_time_hr
-        diff_min = int(sys_time_min) - loc_time_min
+            diff_hr = int(sys_time_hr) - loc_time_hr
+            diff_min = int(sys_time_min) - loc_time_min
 
-        diff_time = diff_min + diff_hr * 60                                     # 算出相差時間並轉換成分鐘
+            diff_time = diff_min + diff_hr * 60                                     # 算出相差時間並轉換成分鐘
 
-        if diff_time > 0:                                                       # 讓sys_time儲存時間差，若時間一樣則儲存OK
-            sys_time = "快" + (str(diff_hr) + "小時") * int(diff_hr != 0) + str(diff_min) + "分鐘"
-        elif diff_time < 0:
-            sys_time = "慢" + (str(abs(diff_hr)) + "小時") * int(diff_hr != 0) + str(abs(diff_min)) + "分鐘"
-        else:
-            sys_time = "OK"
-    except:
-        logging.error("無法獲取時間資訊 " + IP)
-        sys_time = "ERROR"
+            if diff_time > 0:                                                       # 讓sys_time儲存時間差，若時間一樣則儲存OK
+                sys_time = "快" + (str(diff_hr) + "小時") * int(diff_hr != 0) + str(diff_min) + "分鐘"
+            elif diff_time < 0:
+                sys_time = "慢" + (str(abs(diff_hr)) + "小時") * int(diff_hr != 0) + str(abs(diff_min)) + "分鐘"
+            else:
+                sys_time = "OK"
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= ha =============
-    try:
-        sys_ha = driver.find_element_by_id("status").text.split('\n')[-1]       # 抓取f5 UI顯示的HA資訊
-    except:
-        logging.error("無法取得HA資訊 " + IP)
-        sys_ha = "ERROR"
+    while not healthCheck(IP):
+        try:
+            sys_ha = driver.find_element_by_id("status").text.split('\n')[-1]       # 抓取f5 UI顯示的HA資訊
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= hostname =============
-    try:
-        sys_host = driver.find_element_by_id("deviceid").text.split('\n')[1]    # 抓取f5 UI顯示的hostname
-    except:
-        logging.error("無法取得hostname資訊 " + IP)
-        sys_host = "ERROR"
+    while not healthCheck(IP):
+        try:
+            sys_host = driver.find_element_by_id("deviceid").text.split('\n')[1]    # 抓取f5 UI顯示的hostname
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= sn, sys_ver =============
-    try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_general.jsp")  # 載入 System >> Configuration
-        sleep(sleep_time)
-        driver.switch_to.frame(driver.find_element_by_id("contentframe"))       # 切換到包含資料的frame 
-        items = driver.find_elements_by_class_name("settings")                  # 複製UI上表格內的所有資料
-        sys_sn, sys_ver = [item.text for item in items][1:3]                    # SN、版本分別為第2與第3項
-    except:
-        logging.error("無法取得 S/N 或版本資訊 " + IP)
+    driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_general.jsp")  # 載入 System >> Configuration
+    while not healthCheck(IP):
+        try:
+            driver.switch_to.frame(driver.find_element_by_id("contentframe"))       # 切換到包含資料的frame 
+            items = driver.find_elements_by_class_name("settings")                  # 複製UI上表格內的所有資料
+            sys_sn, sys_ver = [item.text for item in items][1:3]                    # SN、版本分別為第2與第3項
+            break
+        except:
+            pass
         
     if healthCheck(IP):
         driver.close()
         return
 # ============= ucs, qkview =============
-    thread_qkview = threading.Thread(target=get_qkview, args=(client,sys_host))    # 因為產出時間較久，開一個執行續在背景跑
-    thread_ucs = threading.Thread(target=get_ucs, args=(client,sys_host))       # 因為產出時間較久，開一個執行續在背景跑
-    thread_qkview.start()
-    thread_ucs.start()
+    # thread_qkview = threading.Thread(target=get_qkview, args=(client,sys_host))    # 因為產出時間較久，開一個執行續在背景跑
+    # thread_ucs = threading.Thread(target=get_ucs, args=(client,sys_host))       # 因為產出時間較久，開一個執行續在背景跑
+    # thread_qkview.start()
+    # thread_ucs.start()
 
     if healthCheck(IP):
         driver.close()
@@ -411,130 +415,133 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         driver.close()
         return    
 # ============= uptime =============
-    try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/service/list.jsp")       # 抓取 System>>Services頁面
-        sleep(sleep_time)
-        driver.switch_to.frame(driver.find_element_by_id("contentframe"))                       # 切換至含有資料的frame
-        uptime_text = driver.find_element_by_id("list_body").text.split('\n')[0].split(',')[0].split(' ')[-2:]  # 擷取big3d的運行時間
-        sys_uptime = uptime_text[0] + ' ' + uptime_text[1]
-    except:
-        logging.error("無法取得uptime資訊 " + IP)
+    driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/service/list.jsp")       # 抓取 System>>Services頁面
+    while not healthCheck(IP):
+        try:
+            driver.switch_to.frame(driver.find_element_by_id("contentframe"))                       # 切換至含有資料的frame
+            uptime_text = driver.find_element_by_id("list_body").text.split('\n')[0].split(',')[0].split(' ')[-2:]  # 擷取big3d的運行時間
+            sys_uptime = uptime_text[0] + ' ' + uptime_text[1]
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= certificate =============
-    try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/locallb/ssl_certificate/list.jsp?&startListIndex=0&showAll=true")
-        # 抓取憑證頁面並顯示全部憑證
-        sleep(sleep_time*3) # 預留載入憑證時間
-        driver.switch_to.frame(driver.find_element_by_id("contentframe"))
+    driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/locallb/ssl_certificate/list.jsp?&startListIndex=0&showAll=true")
+    # 抓取憑證頁面並顯示全部憑證
+    while not healthCheck(IP):
+        try:
+            driver.switch_to.frame(driver.find_element_by_id("contentframe"))
 
-        certificates = driver.find_element_by_id("list_body").text.split('\n') 
-        # 以換行符號區分各憑證
+            certificates = driver.find_element_by_id("list_body").text.split('\n') 
+            # 以換行符號區分各憑證
 
-        # 過期和即將過期憑證的警示符號會被解讀成一個換行符號，
-        # 若該憑證過期或即將過期會解讀為以下格式:
-        #   憑證資訊 \n 到期日 \n partition \n
-        # 而正常未過期憑證則是:
-        #   憑證資訊    到期日    partition \n
-        # 日期字串長度不會超過13個字元(Jan 26, 2021 --> 12個字元)，且通常憑證儲存在Common
-        # 故以此邏輯進行憑證是否過期判斷:
+            # 過期和即將過期憑證的警示符號會被解讀成一個換行符號，
+            # 若該憑證過期或即將過期會解讀為以下格式:
+            #   憑證資訊 \n 到期日 \n partition \n
+            # 而正常未過期憑證則是:
+            #   憑證資訊    到期日    partition \n
+            # 日期字串長度不會超過13個字元(Jan 26, 2021 --> 12個字元)，且通常憑證儲存在Common
+            # 故以此邏輯進行憑證是否過期判斷:
 
-        # 若該項字串長度小於13且不為Common，則其前一項必為該憑證資訊
+            # 若該項字串長度小於13且不為Common，則其前一項必為該憑證資訊
 
-        expired = []        # 存放過期憑證
-        near_expired = []   # 存放即將過期憑證
-        for i in range(len(certificates)):
-            if(len(certificates[i]) < 13 and certificates[i] != "Common"):  # 判斷是否為快過期或過期憑證的時間
-                d1 = datetime.strptime(certificates[i], "%b %d, %Y")        # 將該時間轉換格式以便比對
-                if d1 < today:                                              # 若憑證過期則加入過期憑證list
-                    expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
-                elif d1 >= today:                                           # 若憑證尚未過期則加入即將過期憑證list
-                    near_expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
-        if len(expired) == 0 and len(near_expired) == 0:                    # 若兩個list皆未儲存任何憑證則讓sys_cert=OK
-            sys_cert = "OK"
-        else:                                                               # 若有任何一個list有憑證則寫入IP_Certificate.txt中
-            sys_cert = "expired: " + str(len(expired)) + " near expire:" + str(len(near_expired))
-            with open(IP+"_Certificate.txt","w",encoding="utf-8") as cert_file:
-                cert_file.write("Near Expire:\n")
-                [cert_file.write(row + "\n") for row in near_expired]
-                cert_file.write("\nExpired:\n")
-                [cert_file.write(row + "\n") for row in expired]
-    except:
-        logging.error("無法取得憑證資訊 " + IP)
+            expired = []        # 存放過期憑證
+            near_expired = []   # 存放即將過期憑證
+            for i in range(len(certificates)):
+                if(len(certificates[i]) < 13 and certificates[i] != "Common"):  # 判斷是否為快過期或過期憑證的時間
+                    d1 = datetime.strptime(certificates[i], "%b %d, %Y")        # 將該時間轉換格式以便比對
+                    if d1 < today:                                              # 若憑證過期則加入過期憑證list
+                        expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
+                    elif d1 >= today:                                           # 若憑證尚未過期則加入即將過期憑證list
+                        near_expired.append(certificates[i-1].split(' ')[0] + "\t\t" + certificates[i])
+            if len(expired) == 0 and len(near_expired) == 0:                    # 若兩個list皆未儲存任何憑證則讓sys_cert=OK
+                sys_cert = "OK"
+            else:                                                               # 若有任何一個list有憑證則寫入IP_Certificate.txt中
+                sys_cert = "expired: " + str(len(expired)) + " near expire:" + str(len(near_expired))
+                with open(IP+"_Certificate.txt","w",encoding="utf-8") as cert_file:
+                    cert_file.write("Near Expire:\n")
+                    [cert_file.write(row + "\n") for row in near_expired]
+                    cert_file.write("\nExpired:\n")
+                    [cert_file.write(row + "\n") for row in expired]
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= NTP =============
-    try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_ntp.jsp") 
-        # 抓取System>>Configuration:NTP頁面
-        sleep(sleep_time)
-        driver.switch_to.frame(driver.find_element_by_id("contentframe"))
-        lst = [item for item in driver.find_element_by_id("ntp.servers").text.replace(' ', '').split('\n') if item != '']   
-        # 抓取ntp server內容 如有設定則加入list中
+    driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/device/properties_ntp.jsp") 
+    # 抓取System>>Configuration:NTP頁面
+    while not healthCheck(IP):
+        try:
+            driver.switch_to.frame(driver.find_element_by_id("contentframe"))
+            lst = [item for item in driver.find_element_by_id("ntp.servers").text.replace(' ', '').split('\n') if item != '']   
+            # 抓取ntp server內容 如有設定則加入list中
 
-        if len(lst) == 0:       # 如未設定NTP server 則 sys_ntp = N/A， 有設定則填入OK
-            sys_ntp = "N/A"
-        else:
-            sys_ntp = "OK"
-    except:
-        logging.error("無法取得NTP資訊 " + IP)
+            if len(lst) == 0:       # 如未設定NTP server 則 sys_ntp = N/A， 有設定則填入OK
+                sys_ntp = "N/A"
+            else:
+                sys_ntp = "OK"
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= SNMP =============
-    try:
-        driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/snmp/configuration_agent.jsp")
-        # 抓取System>>SNMP頁面
-        sleep(sleep_time)
-        driver.switch_to.frame(driver.find_element_by_id("contentframe"))
-        lst = [item for item in driver.find_element_by_id(
-            "snmp_allow_list").text.replace(' ', '').split('\n') if item != '']
-        # 抓取snmp內容 加入list中
-        if len(lst) == 0 or lst[0] == "127.0.0.0/8":    # 如未設定SNMP則 sys_snmp= N/A， 有設定則填入OK
-            sys_snmp = "N/A"
-        else:
-            sys_snmp = "OK"
-    except:
-        logging.error("無法取得SNMP資訊 " + IP)
+    driver.get("https://" + IP + "/tmui/Control/jspmap/tmui/system/snmp/configuration_agent.jsp")
+    # 抓取System>>SNMP頁面
+    while not healthCheck(IP):
+        try:
+            driver.switch_to.frame(driver.find_element_by_id("contentframe"))
+            lst = [item for item in driver.find_element_by_id(
+                "snmp_allow_list").text.replace(' ', '').split('\n') if item != '']
+            # 抓取snmp內容 加入list中
+            if len(lst) == 0 or lst[0] == "127.0.0.0/8":    # 如未設定SNMP則 sys_snmp= N/A， 有設定則填入OK
+                sys_snmp = "N/A"
+            else:
+                sys_snmp = "OK"
+            break
+        except:
+            pass
 
     if healthCheck(IP):
         driver.close()
         return
 # ============= mem =============
-    try:
-        driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
-        # 抓取Statistic>>Performance>>Traffic Report背景傳輸的throughput CSV檔
-        # 檔案內容為30天以來每20分鐘取樣一次的系統效能及流量紀錄
-        # 記憶體用量、CPU用量以及throughput皆記錄在同一檔案
-        sleep(sleep_time)
-        os.rename(PATH + "\\" + IP +"\\data_viz.jsp", PATH + "\\" + IP + "\\throughput.csv")
-        # 將下載後的檔案改名 方便讀取
-        sleep(sleep_time)
-        df = pd.read_csv(IP + "\\throughput.csv")
-        mem = df[["Rtmmused", "Rtmmmemory"]]
-        used = mem["Rtmmused"].values.tolist()
-        total = mem["Rtmmmemory"].values.tolist()
-        # 讀取csv檔中記憶體使用量以及記憶體大小
-        mem_max = 0
-        mem_min = 101
-        for i in range(len(total)):
-            value = round((used[i]/total[i]) * 100)
-            mem_max = value if value > mem_max else mem_max
-            mem_min = value if value < mem_min else mem_min
-            # 計算每20分鐘的用量最大值及最小值，並記錄在mem_max與mem_min中
+    driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=throughput")
+    # 抓取Statistic>>Performance>>Traffic Report背景傳輸的throughput CSV檔
+    # 檔案內容為30天以來每20分鐘取樣一次的系統效能及流量紀錄
+    # 記憶體用量、CPU用量以及throughput皆記錄在同一檔案
+    while not healthCheck(IP):
+        try:
+            os.rename(PATH + "\\" + IP +"\\data_viz.jsp", PATH + "\\" + IP + "\\throughput.csv")
+            # 將下載後的檔案改名 方便讀取
+            df = pd.read_csv(IP + "\\throughput.csv")
+            mem = df[["Rtmmused", "Rtmmmemory"]]
+            used = mem["Rtmmused"].values.tolist()
+            total = mem["Rtmmmemory"].values.tolist()
+            # 讀取csv檔中記憶體使用量以及記憶體大小
+            mem_max = 0
+            mem_min = 101
+            for i in range(len(total)):
+                value = round((used[i]/total[i]) * 100)
+                mem_max = value if value > mem_max else mem_max
+                mem_min = value if value < mem_min else mem_min
+                # 計算每20分鐘的用量最大值及最小值，並記錄在mem_max與mem_min中
 
-        if mem_max == mem_min:      # 將最大最小值以範圍的型態表示
-            sys_mem = str(mem_min) + "%"
-        else:
-            sys_mem = str(mem_min) + "% ~ " + str(mem_max) + "%"
-
-    except :
-        logging.error("無法取得記憶體用量 " + IP)
+            if mem_max == mem_min:      # 將最大最小值以範圍的型態表示
+                sys_mem = str(mem_min) + "%"
+            else:
+                sys_mem = str(mem_min) + "% ~ " + str(mem_max) + "%"
+            break
+        except :
+            pass
 # ============= cpu =============
     try:
         cpu = df[["Ruser", "Rniced","Rsystem","Ridle","Rirq","Rsoftirq","Riowait"]]     # 讀取計算cpu用量的參數
@@ -555,7 +562,6 @@ def get_data(IP, ACC, PASS, sleep_time=5):
             sys_cpu = str(cpu_min) + "%"
         else:
             sys_cpu = str(cpu_min) + "% ~ " + str(cpu_max) + "%"
-
     except :
         logging.error("無法取得CPU用量 " + IP)
 # ============= throughput =============
@@ -572,22 +578,22 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         driver.close()
         return
 # ============= active connection =============
-    try:
-        driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
-        # 抓取Statistic>>Performance>>Traffic Report背景傳輸的connection CSV檔
-        sleep(sleep_time)
-        os.rename(PATH + "\\" + IP + "\\data_viz.jsp", PATH + "\\" + IP + "\\connections.csv")
-        # 將下載後的檔案改名 方便讀取
-        sleep(sleep_time)
-        df = pd.read_csv(IP + "\\connections.csv")
-        ac = np.array(df["curclientconns"].values.tolist())
-        # 讀取active connection數據
-        maxium = int(round(max(ac)))
-        minimum = int(round(min(ac)))
-        sys_ac = change_unit(minimum, "/sec") + " ~ " + change_unit(maxium, "/sec")
-        # 抓取大最小值轉換單位後以範圍形式表示
-    except:
-        logging.error("無法取得 active connection " + IP)
+    driver.get("https://" + IP + "/tmui/tmui/util/ajax/data_viz.jsp?cache=" + str(int(time())) + "&name=connections")
+    # 抓取Statistic>>Performance>>Traffic Report背景傳輸的connection CSV檔
+    while not healthCheck(IP):
+        try:
+            os.rename(PATH + "\\" + IP + "\\data_viz.jsp", PATH + "\\" + IP + "\\connections.csv")
+            # 將下載後的檔案改名 方便讀取
+            df = pd.read_csv(IP + "\\connections.csv")
+            ac = np.array(df["curclientconns"].values.tolist())
+            # 讀取active connection數據
+            maxium = int(round(max(ac)))
+            minimum = int(round(min(ac)))
+            sys_ac = change_unit(minimum, "/sec") + " ~ " + change_unit(maxium, "/sec")
+            # 抓取大最小值轉換單位後以範圍形式表示
+            break
+        except:
+            pass
 # ============= new connection =============
     try:
         nc = np.array(df["totclientconns"].values.tolist())     # 讀取new connection數據
@@ -596,7 +602,7 @@ def get_data(IP, ACC, PASS, sleep_time=5):
         sys_nc = change_unit(minimum,"/sec") + " ~ " + change_unit(maxium,"/sec")
         # 抓取大最小值轉換單位後以範圍形式表示
     except:
-        logging.error("無法取得 new connection " + IP)
+        logging.error("無法取得new connection " + IP)
 
     if healthCheck(IP):
         driver.close()
@@ -605,16 +611,14 @@ def get_data(IP, ACC, PASS, sleep_time=5):
     # 讀取完資料收尾
     shutil.rmtree(IP, ignore_errors=True)                           # 將存放csv檔的資料夾刪除
     driver.close()                                                  # 關閉瀏覽器
-    thread_qkview.join()                                            # 等待qkview收集完畢
-    thread_ucs.join()                                               # 等待ucs收集完畢
+    # thread_qkview.join()                                            # 等待qkview收集完畢
+    # thread_ucs.join()                                               # 等待ucs收集完畢
     sys_qkview = "OK" if os.path.exists(PATH + "\\qkviews\\" + sys_host + '_' + now + ".qkview") else "ERROR"   # 若沒有收集到qkview則sys_qkview=ERROR
     sys_ucs = "OK" if os.path.exists(PATH + "\\ucs\\" + sys_host + '_' + now + ".ucs") else "ERROR"             # 若沒有收集到ucs則sys_ucs=ERROR
 
     thread_ltmLog.join()                                            # 等待ltm log 收集完畢
     thread_systemLog.join()                                         # 等待system log 收集完畢
     shutil.rmtree(PATH + "\\" + IP + "_log", ignore_errors=True)    # 將存放log檔的資料夾刪除
-    if len(os.listdir(IP+"_ERR_LOG"))==0:                           # 如果沒有錯誤log則將存放錯誤log資料夾刪除
-        shutil.rmtree(PATH + "\\" + IP + "_ERR_LOG", ignore_errors=True)
 
     outgo = [sys_host, sys_sn, sys_uptime, sys_mem, sys_cpu, sys_ac, sys_nc, sys_tp,
              sys_log, sys_ntp, sys_snmp, sys_ucs, sys_qkview, sys_time, sys_cert, sys_ha, sys_ver]
@@ -644,13 +648,13 @@ if __name__ == "__main__":
         IP = device[0]
         ACCOUNT = device[1]
         PASSWD = device[2]      # 抓取設備IP、帳號、密碼
-        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD, 25)) # 開啟一個執行續 設定get_data參數延遲25秒(lab太慢)
+        t = threading.Thread(target=get_data, args=(IP, ACCOUNT, PASSWD)) # 開啟一個執行續 設定get_data參數
         t.start()
         if process_count == 4:  # 限制同時搜尋4台設備
             t.join()
             process_count = 0   # 等待其中一台搜尋完畢重設process_count
 
-    while(pass_count<len(devices)): # 等待全部設備搜尋完畢再繼續
+    while(pass_count<=len(devices)): # 等待全部設備搜尋完畢再繼續
         sleep(1)
         
     csvfile.close()             # 關閉收集資料檔
