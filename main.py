@@ -654,7 +654,7 @@ if __name__ == "__main__":
             t.join()
             process_count = 0   # 等待其中一台搜尋完畢重設process_count
 
-    while(pass_count<=len(devices)): # 等待全部設備搜尋完畢再繼續
+    while(pass_count<len(devices)): # 等待全部設備搜尋完畢再繼續
         sleep(1)
         
     csvfile.close()             # 關閉收集資料檔
